@@ -2,7 +2,6 @@ name: Keep Supabase alive
 
 on:
   schedule:
-    # Monday and Thursday at 06:00 UTC
     - cron: "0 6 * * 1,4"
   workflow_dispatch: {}
 
@@ -15,6 +14,4 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
         run: |
-          curl -sS -w "\nHTTP status: %{http_code}\n" \
-            "$SUPABASE_URL/rest/v1/exercises?select=nummer&limit=1" \
-            -H "apikey: $SUPABASE_PUBLISHABLE_KEY"
+          curl -sS -w "\nHTTP status: %{http_code}\n" "$SUPABASE_URL/rest/v1/exercises?select=nummer&limit=1" -H "apikey: $SUPABASE_PUBLISHABLE_KEY"
