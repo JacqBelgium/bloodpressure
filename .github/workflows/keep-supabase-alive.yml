@@ -14,7 +14,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-      run: |
+    run: |
           curl -sS -w "\nHTTP status: %{http_code}\n" \
             "$SUPABASE_URL/rest/v1/exercises?select=nummer&limit=1" \
             -H "apikey: $SUPABASE_PUBLISHABLE_KEY"
