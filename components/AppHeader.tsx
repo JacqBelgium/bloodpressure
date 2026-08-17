@@ -13,7 +13,7 @@ export function AppHeader() {
             strokeLinejoin="round"
           />
         </svg>
-        <span className="text-xl font-semibold text-teal-800">Rustige Kracht</span>
+        <span className="text-xl font-semibold text-teal-800">StaticIso</span>
       </div>
     </header>
   );

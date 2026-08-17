@@ -31,6 +31,10 @@ const TOTAL_WEEKS = 20;
 
 const copy: Record<Lang, Record<string, string>> = {
   nl: {
+    payoff:
+      "Bloeddrukverlaging onderbouwd door onderzoek naar statische, isometrische oefeningen.",
+    intro:
+      "Heeft u een verhoogde bloeddruk en zoekt u een veilige, effectieve manier om deze te verlagen of te stabiliseren? Zonder zware cardiotraining of ingewikkelde schema's? Ontdek de stille kracht van StaticIso. Recent medisch onderzoek toont aan dat het statisch aanspannen van uw spieren – zoals bij een eenvoudige muurzit of handknijpoefening – uw bloedvaten helpt te ontspannen en te verwijden. Met slechts enkele minuten per dag traint u uw bloeddruk effectief omlaag. De meest efficiënte methode voor uw cardiovasculaire gezondheid. Gewoon vanuit huis.",
     disclaimer:
       "Deze oefeningen zijn een aanvulling op — niet een vervanging van — voorgeschreven medicatie. Volg altijd de adviezen van je behandelende arts of specialist.",
     week: "Week",
@@ -59,6 +63,10 @@ const copy: Record<Lang, Record<string, string>> = {
     noExercise: "Er is op dit moment geen oefening beschikbaar.",
   },
   en: {
+    payoff:
+      "Blood pressure reduction supported by research on static, isometric exercise.",
+    intro:
+      "Do you have high blood pressure and are you looking for a safe, effective way to lower or stabilize it? Without intense cardio training or complicated schedules? Discover the quiet power of StaticIso. Recent medical research shows that statically contracting your muscles — such as during a simple wall sit or handgrip exercise — helps relax and widen your blood vessels. In just a few minutes a day, you can effectively train your blood pressure down. The most efficient method for your cardiovascular health. Right from home.",
     disclaimer:
       "These exercises are a complement to — not a replacement for — prescribed medication. Always follow the advice of your treating doctor or specialist.",
     week: "Week",
@@ -158,7 +166,14 @@ export default async function Home() {
   return (
     <main className="flex-1 bg-teal-50 px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-2xl">
-        <div className="rounded-2xl bg-amber-50 p-5 text-base leading-relaxed text-amber-900 ring-1 ring-amber-200 sm:text-lg">
+        <p className="text-xl font-semibold text-teal-800 sm:text-2xl">
+          {t.payoff}
+        </p>
+        <p className="mt-3 text-base leading-relaxed text-slate-600 sm:text-lg">
+          {t.intro}
+        </p>
+
+        <div className="mt-8 rounded-2xl bg-amber-50 p-5 text-base leading-relaxed text-amber-900 ring-1 ring-amber-200 sm:text-lg">
           {t.disclaimer}
         </div>
 

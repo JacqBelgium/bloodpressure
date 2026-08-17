@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Rustige Kracht",
+  title: "StaticIso",
   description:
     "Wekelijkse isometrische oefeningen tegen hoge bloeddruk — een aanvulling op je behandeling.",
 };
