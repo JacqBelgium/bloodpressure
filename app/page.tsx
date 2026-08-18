@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { signOutAction } from "@/app/actions";
 import { createClient } from "@/lib/supabase/server";
 
 type Lang = "nl" | "en";
@@ -61,6 +62,9 @@ const copy: Record<Lang, Record<string, string>> = {
       "We hebben je een inloglink gestuurd. Open je e-mail en klik op de link om verder te gaan.",
     registerLink: "Nog niet aangemeld? Registreer hier.",
     noExercise: "Er is op dit moment geen oefening beschikbaar.",
+    exerciseLoadError:
+      "Er ging iets mis bij het laden van de oefening, probeer het later opnieuw.",
+    logout: "Uitloggen",
   },
   en: {
     payoff:
@@ -93,6 +97,9 @@ const copy: Record<Lang, Record<string, string>> = {
       "We've sent you a login link. Open your email and click the link to continue.",
     registerLink: "Not registered yet? Register here.",
     noExercise: "No exercise is available right now.",
+    exerciseLoadError:
+      "Something went wrong loading the exercise, please try again later.",
+    logout: "Log out",
   },
 };
 
@@ -157,11 +164,27 @@ export default async function Home() {
   const lang: Lang = profile?.taal_voorkeur === "en" ? "en" : "nl";
   const t = copy[lang];
 
-  const { data: rpcData } = await supabase.rpc("get_current_exercise");
-  const exercise = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as
-    | Exercise
-    | null
-    | undefined;
+  let exercise: Exercise | null | undefined;
+  let exerciseLoadError = false;
+
+  try {
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "get_current_exercise",
+    );
+
+    if (rpcError) {
+      console.error("[home] get_current_exercise RPC failed:", rpcError.message);
+      exerciseLoadError = true;
+    } else {
+      exercise = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as
+        | Exercise
+        | null
+        | undefined;
+    }
+  } catch (err) {
+    console.error("[home] get_current_exercise threw unexpectedly:", err);
+    exerciseLoadError = true;
+  }
 
   return (
     <main className="flex-1 bg-teal-50 px-4 py-10 sm:px-6">
@@ -182,9 +205,19 @@ export default async function Home() {
             {t.welcome}
             {profile?.voornaam ? `, ${profile.voornaam}` : ""}
           </h1>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="text-base font-medium text-teal-700 underline hover:text-teal-800"
+            >
+              {t.logout}
+            </button>
+          </form>
         </div>
 
-        {!exercise ? (
+        {exerciseLoadError ? (
+          <p className="mt-6 text-lg text-red-600">{t.exerciseLoadError}</p>
+        ) : !exercise ? (
           <p className="mt-6 text-lg text-slate-600">{t.noExercise}</p>
         ) : (
           <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-teal-100 sm:p-8">

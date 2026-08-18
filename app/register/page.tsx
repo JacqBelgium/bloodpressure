@@ -65,6 +65,7 @@ export default function RegisterPage() {
     startTransition(async () => {
       const result = await registerUser({ voornaam, email, taalVoorkeur: lang });
       if (result.status === "error") {
+        console.error("[register/page] registerUser returned an error:", result.message);
         setError(t.error);
         return;
       }
