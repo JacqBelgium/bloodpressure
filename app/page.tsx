@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { RegisterForm } from "@/components/RegisterForm";
 import { createClient } from "@/lib/supabase/server";
 import { detectLangFromAcceptHeader, type Lang } from "@/lib/lang";
+import { formatWeekRange, getIsoWeekNumber, getIsoWeekRange } from "@/lib/date";
 
 type Exercise = {
   id: string;
@@ -27,8 +28,6 @@ type Exercise = {
   bron: string | null;
 };
 
-const TOTAL_WEEKS = 20;
-
 const copy: Record<Lang, Record<string, string>> = {
   nl: {
     payoff:
@@ -38,7 +37,7 @@ const copy: Record<Lang, Record<string, string>> = {
     disclaimer:
       "Deze oefeningen zijn een aanvulling op — niet een vervanging van — voorgeschreven medicatie. Volg altijd de adviezen van je behandelende arts of specialist.",
     week: "Week",
-    of: "van",
+    exerciseIntro: "Uw oefening voor week",
     welcome: "Hallo",
     startPosition: "Beginpositie",
     movement: "Beweging",
@@ -59,6 +58,8 @@ const copy: Record<Lang, Record<string, string>> = {
     noExercise: "Er is op dit moment geen oefening beschikbaar.",
     exerciseLoadError:
       "Er ging iets mis bij het laden van de oefening, probeer het later opnieuw.",
+    medicalDisclaimer:
+      "Ervaart u problemen of pijn tijdens het uitvoeren van een oefening? Raadpleeg dan uw arts. Wij zijn niet aansprakelijk voor enige schade voortvloeiend uit het gebruik van deze oefeningen.",
   },
   en: {
     payoff:
@@ -68,7 +69,7 @@ const copy: Record<Lang, Record<string, string>> = {
     disclaimer:
       "These exercises are a complement to — not a replacement for — prescribed medication. Always follow the advice of your treating doctor or specialist.",
     week: "Week",
-    of: "of",
+    exerciseIntro: "Your exercise for week",
     welcome: "Hello",
     startPosition: "Starting position",
     movement: "Movement",
@@ -89,6 +90,8 @@ const copy: Record<Lang, Record<string, string>> = {
     noExercise: "No exercise is available right now.",
     exerciseLoadError:
       "Something went wrong loading the exercise, please try again later.",
+    medicalDisclaimer:
+      "If you experience problems or pain while performing an exercise, please consult your doctor. We are not liable for any damages resulting from the use of these exercises.",
   },
 };
 
@@ -146,11 +149,20 @@ export default async function Home() {
     );
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("users")
     .select("voornaam, taal_voorkeur")
     .eq("email", user.email)
     .maybeSingle();
+
+  if (profileError) {
+    console.error("[home] Supabase profile lookup on 'users' failed:", {
+      message: profileError.message,
+      details: profileError.details,
+      hint: profileError.hint,
+      code: profileError.code,
+    });
+  }
 
   const lang: Lang = profile?.taal_voorkeur === "en" ? "en" : "nl";
   const t = copy[lang];
@@ -177,21 +189,22 @@ export default async function Home() {
     exerciseLoadError = true;
   }
 
+  const now = new Date();
+  const isoWeekNumber = getIsoWeekNumber(now);
+  const { start: weekStart, end: weekEnd } = getIsoWeekRange(now);
+  const weekRangeLabel = formatWeekRange(weekStart, weekEnd, lang);
+
   return (
     <main className="flex-1 bg-teal-50 px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-2xl">
-        <p className="text-base leading-relaxed text-slate-600 sm:text-lg">
-          {t.intro}
-        </p>
-
-        <div className="mt-8 rounded-2xl bg-amber-50 p-5 text-base leading-relaxed text-amber-900 ring-1 ring-amber-200 sm:text-lg">
+        <div className="rounded-2xl bg-amber-50 p-5 text-base leading-relaxed text-amber-900 ring-1 ring-amber-200 sm:text-lg">
           {t.disclaimer}
         </div>
 
         <div className="mt-8">
           <h1 className="text-2xl font-semibold text-slate-800 sm:text-3xl">
             {t.welcome}
-            {profile?.voornaam ? `, ${profile.voornaam}` : ""}
+            {profile?.voornaam ? ` ${profile.voornaam}` : ""}
           </h1>
         </div>
 
@@ -201,10 +214,13 @@ export default async function Home() {
           <p className="mt-6 text-lg text-slate-600">{t.noExercise}</p>
         ) : (
           <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-teal-100 sm:p-8">
-            <p className="text-lg font-medium text-teal-700">
-              {t.week} {exercise.nummer} {t.of} {TOTAL_WEEKS}
+            <p className="text-base text-slate-600">
+              {t.exerciseIntro} {isoWeekNumber}, {weekRangeLabel}
             </p>
-            <h2 className="mt-2 text-3xl font-semibold text-slate-800">
+            <div className="mt-3 rounded-2xl bg-amber-50 p-5 text-lg font-medium text-amber-900 ring-1 ring-amber-200">
+              {t.week} {isoWeekNumber}: {weekRangeLabel}
+            </div>
+            <h2 className="mt-6 text-3xl font-semibold text-slate-800">
               {lang === "nl" ? exercise.titel_nl : exercise.titel_en}
             </h2>
 
@@ -335,6 +351,10 @@ export default async function Home() {
             )}
           </div>
         )}
+
+        <p className="mt-8 text-sm leading-relaxed text-slate-500">
+          {t.medicalDisclaimer}
+        </p>
       </div>
     </main>
   );

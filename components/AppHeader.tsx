@@ -19,11 +19,21 @@ export async function AppHeader() {
   let lang: Lang = "nl";
 
   if (user) {
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("users")
       .select("voornaam, taal_voorkeur")
       .eq("email", user.email)
       .maybeSingle();
+
+    if (profileError) {
+      console.error("[AppHeader] Supabase profile lookup on 'users' failed:", {
+        message: profileError.message,
+        details: profileError.details,
+        hint: profileError.hint,
+        code: profileError.code,
+      });
+    }
+
     voornaam = profile?.voornaam ?? null;
     lang = profile?.taal_voorkeur === "en" ? "en" : "nl";
   } else {
