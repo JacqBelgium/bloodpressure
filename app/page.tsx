@@ -36,7 +36,6 @@ const copy: Record<Lang, Record<string, string>> = {
       "Heeft u een verhoogde bloeddruk en zoekt u een veilige, effectieve manier om deze te verlagen of te stabiliseren? Zonder zware cardiotraining of ingewikkelde schema's? Ontdek de stille kracht van StaticIso. Recent medisch onderzoek toont aan dat het statisch aanspannen van uw spieren – zoals bij een eenvoudige muurzit of handknijpoefening – uw bloedvaten helpt te ontspannen en te verwijden. Met slechts enkele minuten per dag traint u uw bloeddruk effectief omlaag. De meest efficiënte methode voor uw cardiovasculaire gezondheid. Gewoon vanuit huis.",
     disclaimer:
       "Deze oefeningen zijn een aanvulling op — niet een vervanging van — voorgeschreven medicatie. Volg altijd de adviezen van je behandelende arts of specialist.",
-    week: "Week",
     exerciseIntro: "Uw oefening voor week",
     welcome: "Hallo",
     startPosition: "Beginpositie",
@@ -68,7 +67,6 @@ const copy: Record<Lang, Record<string, string>> = {
       "Do you have high blood pressure and are you looking for a safe, effective way to lower or stabilize it? Without intense cardio training or complicated schedules? Discover the quiet power of StaticIso. Recent medical research shows that statically contracting your muscles — such as during a simple wall sit or handgrip exercise — helps relax and widen your blood vessels. In just a few minutes a day, you can effectively train your blood pressure down. The most efficient method for your cardiovascular health. Right from home.",
     disclaimer:
       "These exercises are a complement to — not a replacement for — prescribed medication. Always follow the advice of your treating doctor or specialist.",
-    week: "Week",
     exerciseIntro: "Your exercise for week",
     welcome: "Hello",
     startPosition: "Starting position",
@@ -214,11 +212,8 @@ export default async function Home() {
           <p className="mt-6 text-lg text-slate-600">{t.noExercise}</p>
         ) : (
           <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-teal-100 sm:p-8">
-            <p className="text-base text-slate-600">
+            <div className="rounded-2xl bg-amber-50 p-5 text-lg font-medium text-amber-900 ring-1 ring-amber-200">
               {t.exerciseIntro} {isoWeekNumber}, {weekRangeLabel}
-            </p>
-            <div className="mt-3 rounded-2xl bg-amber-50 p-5 text-lg font-medium text-amber-900 ring-1 ring-amber-200">
-              {t.week} {isoWeekNumber}: {weekRangeLabel}
             </div>
             <h2 className="mt-6 text-3xl font-semibold text-slate-800">
               {lang === "nl" ? exercise.titel_nl : exercise.titel_en}
