@@ -1,8 +1,7 @@
-import Link from "next/link";
-import { signOutAction } from "@/app/actions";
+import { headers } from "next/headers";
+import { RegisterForm } from "@/components/RegisterForm";
 import { createClient } from "@/lib/supabase/server";
-
-type Lang = "nl" | "en";
+import { detectLangFromAcceptHeader, type Lang } from "@/lib/lang";
 
 type Exercise = {
   id: string;
@@ -57,14 +56,9 @@ const copy: Record<Lang, Record<string, string>> = {
     videoPlaceholder: "Video volgt binnenkort.",
     audioPlaceholder: "Audio volgt binnenkort.",
     source: "Bron",
-    notLoggedInHeading: "Bijna klaar",
-    notLoggedInBody:
-      "We hebben je een inloglink gestuurd. Open je e-mail en klik op de link om verder te gaan.",
-    registerLink: "Nog niet aangemeld? Registreer hier.",
     noExercise: "Er is op dit moment geen oefening beschikbaar.",
     exerciseLoadError:
       "Er ging iets mis bij het laden van de oefening, probeer het later opnieuw.",
-    logout: "Uitloggen",
   },
   en: {
     payoff:
@@ -92,14 +86,9 @@ const copy: Record<Lang, Record<string, string>> = {
     videoPlaceholder: "Video coming soon.",
     audioPlaceholder: "Audio coming soon.",
     source: "Source",
-    notLoggedInHeading: "Almost there",
-    notLoggedInBody:
-      "We've sent you a login link. Open your email and click the link to continue.",
-    registerLink: "Not registered yet? Register here.",
     noExercise: "No exercise is available right now.",
     exerciseLoadError:
       "Something went wrong loading the exercise, please try again later.",
-    logout: "Log out",
   },
 };
 
@@ -137,19 +126,21 @@ export default async function Home() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    const t = copy.nl;
+    const headersList = await headers();
+    const lang = detectLangFromAcceptHeader(headersList.get("accept-language"));
+    const t = copy[lang];
     return (
-      <main className="flex flex-1 items-center justify-center bg-teal-50 px-4 py-12">
-        <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-sm ring-1 ring-teal-100 sm:p-10">
-          <h1 className="text-2xl font-semibold text-slate-800">
-            {t.notLoggedInHeading}
-          </h1>
-          <p className="mt-3 text-lg text-slate-600">{t.notLoggedInBody}</p>
-          <p className="mt-6 text-base text-slate-500">
-            <Link href="/register" className="font-medium text-teal-700 underline">
-              {t.registerLink}
-            </Link>
+      <main className="flex-1 bg-teal-50 px-4 py-10 sm:px-6">
+        <div className="mx-auto max-w-2xl">
+          <p className="text-xl font-semibold text-teal-800 sm:text-2xl">
+            {t.payoff}
           </p>
+          <p className="mt-3 text-base leading-relaxed text-slate-600 sm:text-lg">
+            {t.intro}
+          </p>
+          <div className="mt-8 flex justify-center">
+            <RegisterForm />
+          </div>
         </div>
       </main>
     );
@@ -189,10 +180,7 @@ export default async function Home() {
   return (
     <main className="flex-1 bg-teal-50 px-4 py-10 sm:px-6">
       <div className="mx-auto max-w-2xl">
-        <p className="text-xl font-semibold text-teal-800 sm:text-2xl">
-          {t.payoff}
-        </p>
-        <p className="mt-3 text-base leading-relaxed text-slate-600 sm:text-lg">
+        <p className="text-base leading-relaxed text-slate-600 sm:text-lg">
           {t.intro}
         </p>
 
@@ -200,19 +188,11 @@ export default async function Home() {
           {t.disclaimer}
         </div>
 
-        <div className="mt-8 flex items-baseline justify-between">
+        <div className="mt-8">
           <h1 className="text-2xl font-semibold text-slate-800 sm:text-3xl">
             {t.welcome}
             {profile?.voornaam ? `, ${profile.voornaam}` : ""}
           </h1>
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="text-base font-medium text-teal-700 underline hover:text-teal-800"
-            >
-              {t.logout}
-            </button>
-          </form>
         </div>
 
         {exerciseLoadError ? (
