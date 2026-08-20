@@ -141,8 +141,8 @@ export async function POST(request: NextRequest) {
       });
       sent += 1;
     } catch (err) {
-      const reason = err instanceof Error ? err.message : "Unknown error";
-      console.error(`[send-weekly-emails] Failed to send to ${user.email}:`, reason);
+      const reason = err instanceof Error ? err.message : String(err);
+      console.error(`[send-weekly-emails] Failed to send to ${user.email}:`, reason, err);
       failures.push({ email: user.email, reason });
     }
   }
