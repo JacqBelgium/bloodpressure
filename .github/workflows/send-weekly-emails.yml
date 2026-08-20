@@ -1,0 +1,16 @@
+name: Send weekly exercise emails
+
+on:
+  schedule:
+    - cron: "0 3 * * 6"
+  workflow_dispatch: {}
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger weekly exercise emails
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -sS -w "\nHTTP status: %{http_code}\n" -X POST "https://bloodpressure.vandersteen.be/api/send-weekly-emails" -H "Authorization: Bearer $CRON_SECRET"
