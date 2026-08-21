@@ -4,6 +4,7 @@ export type SendEmailInput = {
   to: { email: string; name: string };
   subject: string;
   htmlBody: string;
+  replyTo?: { email: string; name: string };
 };
 
 // The zeptomail SDK doesn't consistently reject with an Error instance:
@@ -42,7 +43,7 @@ async function describeSendMailError(err: unknown): Promise<string> {
   return String(err);
 }
 
-export async function sendEmail({ to, subject, htmlBody }: SendEmailInput) {
+export async function sendEmail({ to, subject, htmlBody, replyTo }: SendEmailInput) {
   const client = new SendMailClient({
     url: "https://api.zeptomail.com/v1.1/email",
     token: process.env.ZEPTOMAIL_API_KEY!,
@@ -64,6 +65,7 @@ export async function sendEmail({ to, subject, htmlBody }: SendEmailInput) {
       ],
       subject,
       htmlbody: htmlBody,
+      ...(replyTo ? { reply_to: [{ address: replyTo.email, name: replyTo.name }] } : {}),
     });
   } catch (err) {
     const reason = await describeSendMailError(err);

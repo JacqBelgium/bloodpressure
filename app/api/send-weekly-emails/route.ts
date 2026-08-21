@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
 import { formatWeekRange, getIsoWeekNumber, getIsoWeekRange } from "@/lib/date";
+import { escapeHtml } from "@/lib/html";
 import type { Lang } from "@/lib/lang";
 
 const SITE_URL = "https://bloodpressure.vandersteen.be";
@@ -25,15 +26,6 @@ const copy: Record<Lang, { subject: string; greeting: string; intro: string; cta
     cta: "View the exercise",
   },
 };
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 function buildHtmlBody({
   voornaam,
