@@ -87,7 +87,10 @@ export function AccountForm({
             type="text"
             required
             value={voornaam}
-            onChange={(e) => setVoornaam(e.target.value)}
+            onChange={(e) => {
+              setVoornaam(e.target.value);
+              setSaved(false);
+            }}
             className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-lg text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-200"
           />
         </div>
@@ -97,7 +100,10 @@ export function AccountForm({
           <div className="mt-2 flex gap-3">
             <button
               type="button"
-              onClick={() => setLang("nl")}
+              onClick={() => {
+                setLang("nl");
+                setSaved(false);
+              }}
               aria-pressed={lang === "nl"}
               className={`flex-1 rounded-xl border px-4 py-3 text-lg font-medium transition-colors ${
                 lang === "nl"
@@ -109,7 +115,10 @@ export function AccountForm({
             </button>
             <button
               type="button"
-              onClick={() => setLang("en")}
+              onClick={() => {
+                setLang("en");
+                setSaved(false);
+              }}
               aria-pressed={lang === "en"}
               className={`flex-1 rounded-xl border px-4 py-3 text-lg font-medium transition-colors ${
                 lang === "en"
@@ -128,10 +137,6 @@ export function AccountForm({
           </p>
         )}
 
-        {saved && !error && (
-          <p className="text-base font-medium text-teal-700">{t.saved}</p>
-        )}
-
         <button
           type="submit"
           disabled={isPending}
@@ -139,6 +144,10 @@ export function AccountForm({
         >
           {isPending ? t.saving : t.save}
         </button>
+
+        {saved && !error && (
+          <p className="text-center text-base font-medium text-teal-700">{t.saved}</p>
+        )}
 
         <Link
           href="/"
