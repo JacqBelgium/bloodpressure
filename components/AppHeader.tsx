@@ -63,9 +63,12 @@ export async function AppHeader() {
 
         {user ? (
           <div className="flex items-center gap-4">
-            <span className="text-base font-medium text-slate-700">
+            <Link
+              href="/account"
+              className="text-base font-medium text-slate-700 hover:text-teal-700 hover:underline"
+            >
               {voornaam ?? user.email}
-            </span>
+            </Link>
             <form action={signOutAction}>
               <button
                 type="submit"

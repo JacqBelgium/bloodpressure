@@ -41,12 +41,14 @@ function buildHtmlBody({
   isoWeekNumber,
   weekRangeLabel,
   lang,
+  ctaLink,
 }: {
   voornaam: string;
   title: string;
   isoWeekNumber: number;
   weekRangeLabel: string;
   lang: Lang;
+  ctaLink: string;
 }): string {
   const t = copy[lang];
   const safeVoornaam = escapeHtml(voornaam);
@@ -59,7 +61,7 @@ function buildHtmlBody({
       <h2 style="color: #0d9488; margin: 16px 0;">${safeTitle}</h2>
       <p>
         <a
-          href="${SITE_URL}"
+          href="${ctaLink}"
           style="display: inline-block; background: #0d9488; color: #ffffff; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600;"
         >
           ${t.cta}
@@ -127,6 +129,26 @@ export async function POST(request: NextRequest) {
     const weekRangeLabel = formatWeekRange(start, end, lang);
     const title = lang === "nl" ? exercise.titel_nl : exercise.titel_en;
 
+    // A plain link to the site would land the user on the login/register
+    // screen if the email client opens it without the browser's existing
+    // session cookies (common with Gmail etc.). Generating a real,
+    // single-use magic link per recipient means the link itself signs
+    // the user in, regardless of session state, straight to /auth/callback.
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email: user.email,
+      options: {
+        redirectTo: `${SITE_URL}/auth/callback`,
+      },
+    });
+
+    if (linkError || !linkData?.properties?.action_link) {
+      const reason = linkError?.message ?? "Failed to generate magic link";
+      console.error(`[send-weekly-emails] Failed to generate link for ${user.email}:`, reason, linkError);
+      failures.push({ email: user.email, reason });
+      continue;
+    }
+
     try {
       await sendEmail({
         to: { email: user.email, name: user.voornaam },
@@ -137,6 +159,7 @@ export async function POST(request: NextRequest) {
           isoWeekNumber,
           weekRangeLabel,
           lang,
+          ctaLink: linkData.properties.action_link,
         }),
       });
       sent += 1;

@@ -2,7 +2,7 @@ name: Send weekly exercise emails
 
 on:
   schedule:
-    - cron: "0 3 * * 6"
+    - cron: "0 3 * * 1"
   workflow_dispatch: {}
 
 jobs:
