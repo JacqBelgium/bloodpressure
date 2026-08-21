@@ -46,7 +46,7 @@ export async function AppHeader() {
   return (
     <header className="border-b border-teal-100 bg-white">
       <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <div className="flex items-center gap-3">
+        <Link href="/" aria-label="Back to homepage" className="flex items-center gap-3">
           <svg viewBox="0 0 100 100" className="h-8 w-8 shrink-0" aria-hidden="true">
             <circle cx="50" cy="50" r="48" fill="#0d9488" />
             <path
@@ -58,8 +58,13 @@ export async function AppHeader() {
               strokeLinejoin="round"
             />
           </svg>
-          <span className="text-xl font-semibold text-teal-800">StaticIso</span>
-        </div>
+          <span>
+            <span className="text-[24px] font-bold text-teal-600">S</span>
+            <span className="text-[17px] font-normal text-black">tatic </span>
+            <span className="text-[24px] font-bold text-teal-600">I</span>
+            <span className="text-[17px] font-normal text-black">so</span>
+          </span>
+        </Link>
 
         {user ? (
           <div className="flex items-center gap-4">
