@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { FileText } from "lucide-react";
 import { RegisterForm } from "@/components/RegisterForm";
 import { createClient } from "@/lib/supabase/server";
 import { detectLangFromAcceptHeader, type Lang } from "@/lib/lang";
@@ -96,14 +97,15 @@ const copy: Record<Lang, Record<string, string>> = {
 const META_ANALYSIS_URL = "https://pmc.ncbi.nlm.nih.gov/articles/PMC12989405/";
 const EXERCISE_COMPARISON_URL = "https://pubmed.ncbi.nlm.nih.gov/37491419/";
 
-function ExternalLink({ href, children }: { href: string; children: React.ReactNode }) {
+function StudyBadge({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-teal-700 underline hover:text-teal-800"
+      className="inline-flex items-center gap-2 rounded-full bg-teal-100 px-4 py-2 text-sm font-medium text-teal-800 transition-colors hover:bg-teal-200"
     >
+      <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
       {children}
     </a>
   );
@@ -156,32 +158,22 @@ export default async function Home() {
             {t.intro}
           </p>
           <p className="mt-4 text-base leading-relaxed text-slate-600 sm:text-lg">
-            {lang === "nl" ? (
-              <>
-                Wetenschappelijk onderzoek bevestigt dit effect: een meta-analyse van{" "}
-                <ExternalLink href={META_ANALYSIS_URL}>40 klinische studies</ExternalLink>{" "}
-                toont een gemiddelde bloeddrukdaling van{" "}
-                <ExternalLink href={META_ANALYSIS_URL}>6,6 mmHg</ExternalLink> aan, en een
-                grootschalige analyse van 270 onderzoeken wijst isometrische training aan als de{" "}
-                <ExternalLink href={EXERCISE_COMPARISON_URL}>
-                  meest effectieve vorm van beweging
-                </ExternalLink>{" "}
-                voor bloeddrukverlaging.
-              </>
-            ) : (
-              <>
-                Scientific research confirms this effect: a meta-analysis of{" "}
-                <ExternalLink href={META_ANALYSIS_URL}>40 clinical trials</ExternalLink> shows
-                an average blood pressure reduction of{" "}
-                <ExternalLink href={META_ANALYSIS_URL}>6.6 mmHg</ExternalLink>, and a
-                large-scale analysis of 270 trials identifies isometric training as the{" "}
-                <ExternalLink href={EXERCISE_COMPARISON_URL}>
-                  most effective form of exercise
-                </ExternalLink>{" "}
-                for lowering blood pressure.
-              </>
-            )}
+            {lang === "nl"
+              ? "Wetenschappelijk onderzoek bevestigt dit effect: een meta-analyse van 40 klinische studies toont een gemiddelde bloeddrukdaling van 6,6 mmHg aan, en een grootschalige analyse van 270 onderzoeken wijst isometrische training aan als de meest effectieve vorm van beweging voor bloeddrukverlaging."
+              : "Scientific research confirms this effect: a meta-analysis of 40 clinical trials shows an average blood pressure reduction of 6.6 mmHg, and a large-scale analysis of 270 trials identifies isometric training as the most effective form of exercise for lowering blood pressure."}
           </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <StudyBadge href={META_ANALYSIS_URL}>
+              {lang === "nl"
+                ? "Meta-analyse: 40 studies, 6,6 mmHg"
+                : "Meta-analysis: 40 trials, 6.6 mmHg"}
+            </StudyBadge>
+            <StudyBadge href={EXERCISE_COMPARISON_URL}>
+              {lang === "nl"
+                ? "Vergelijkende studie: 270 onderzoeken"
+                : "Comparison study: 270 trials"}
+            </StudyBadge>
+          </div>
           <div className="mt-8 flex justify-center">
             <RegisterForm />
           </div>
