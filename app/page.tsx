@@ -158,9 +158,21 @@ export default async function Home() {
             {t.intro}
           </p>
           <p className="mt-4 text-base leading-relaxed text-slate-600 sm:text-lg">
-            {lang === "nl"
-              ? "Wetenschappelijk onderzoek bevestigt dit effect: een meta-analyse van 40 klinische studies toont een gemiddelde bloeddrukdaling van 6,6 mmHg aan, en een grootschalige analyse van 270 onderzoeken wijst isometrische training aan als de meest effectieve vorm van beweging voor bloeddrukverlaging."
-              : "Scientific research confirms this effect: a meta-analysis of 40 clinical trials shows an average blood pressure reduction of 6.6 mmHg, and a large-scale analysis of 270 trials identifies isometric training as the most effective form of exercise for lowering blood pressure."}
+            {lang === "nl" ? (
+              <>
+                <span className="font-bold">Wetenschappelijk onderzoek bevestigt dit effect:</span>{" "}
+                een meta-analyse van 40 klinische studies toont een gemiddelde bloeddrukdaling van
+                6,6 mmHg aan, en een grootschalige analyse van 270 onderzoeken wijst isometrische
+                training aan als de meest effectieve vorm van beweging voor bloeddrukverlaging.
+              </>
+            ) : (
+              <>
+                <span className="font-bold">Scientific research confirms this effect:</span> a
+                meta-analysis of 40 clinical trials shows an average blood pressure reduction of
+                6.6 mmHg, and a large-scale analysis of 270 trials identifies isometric training
+                as the most effective form of exercise for lowering blood pressure.
+              </>
+            )}
           </p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <StudyBadge href={META_ANALYSIS_URL}>
