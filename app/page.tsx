@@ -32,7 +32,7 @@ type Exercise = {
 const copy: Record<Lang, Record<string, string>> = {
   nl: {
     payoff:
-      "Bloeddrukverlaging onderbouwd door onderzoek naar statische, isometrische oefeningen.",
+      "Bloeddrukverlaging ondersteund door statische, isometrische oefeningen.",
     intro:
       "Heeft u een verhoogde bloeddruk en zoekt u een veilige, effectieve manier om deze te verlagen of te stabiliseren? Zonder zware cardiotraining of ingewikkelde schema's? Ontdek de stille kracht van StaticIso. Recent medisch onderzoek toont aan dat het statisch aanspannen van uw spieren – zoals bij een eenvoudige muurzit of handknijpoefening – uw bloedvaten helpt te ontspannen en te verwijden. Met slechts enkele minuten per dag traint u uw bloeddruk effectief omlaag. De meest efficiënte methode voor uw cardiovasculaire gezondheid. Gewoon vanuit huis.",
     disclaimer:
@@ -63,7 +63,7 @@ const copy: Record<Lang, Record<string, string>> = {
   },
   en: {
     payoff:
-      "Blood pressure reduction supported by research on static, isometric exercise.",
+      "Blood pressure reduction supported by static isometric exercises.",
     intro:
       "Do you have high blood pressure and are you looking for a safe, effective way to lower or stabilize it? Without intense cardio training or complicated schedules? Discover the quiet power of StaticIso. Recent medical research shows that statically contracting your muscles — such as during a simple wall sit or handgrip exercise — helps relax and widen your blood vessels. In just a few minutes a day, you can effectively train your blood pressure down. The most efficient method for your cardiovascular health. Right from home.",
     disclaimer:
