@@ -23,6 +23,7 @@ type Exercise = {
   detail_nl: string | null;
   detail_en: string | null;
   foto_url: string | null;
+  foto_url_eind: string | null;
   video_url: string | null;
   audio_url_nl: string | null;
   audio_url_en: string | null;
@@ -51,6 +52,8 @@ const copy: Record<Lang, Record<string, string>> = {
     photo: "Foto",
     video: "Video",
     audio: "Audio",
+    startPositionAlt: "beginpositie",
+    endPositionAlt: "eindpositie",
     photoPlaceholder: "Foto volgt binnenkort.",
     videoPlaceholder: "Video volgt binnenkort.",
     audioPlaceholder: "Audio volgt binnenkort.",
@@ -82,6 +85,8 @@ const copy: Record<Lang, Record<string, string>> = {
     photo: "Photo",
     video: "Video",
     audio: "Audio",
+    startPositionAlt: "starting position",
+    endPositionAlt: "end position",
     photoPlaceholder: "Photo coming soon.",
     videoPlaceholder: "Video coming soon.",
     audioPlaceholder: "Audio coming soon.",
@@ -271,18 +276,26 @@ export default async function Home() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={exercise.foto_url}
-                  alt={lang === "nl" ? exercise.titel_nl : exercise.titel_en}
+                  alt={`${lang === "nl" ? exercise.titel_nl : exercise.titel_en} – ${t.startPositionAlt}`}
                   className="h-40 w-full rounded-xl object-cover"
                 />
               ) : (
                 <MediaPlaceholder label={t.photoPlaceholder} />
               )}
 
+              {/* Fallback order: video, then end-position photo, then placeholder. */}
               {exercise.video_url ? (
                 <video
                   controls
                   className="h-40 w-full rounded-xl bg-black object-cover"
                   src={exercise.video_url}
+                />
+              ) : exercise.foto_url_eind ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={exercise.foto_url_eind}
+                  alt={`${lang === "nl" ? exercise.titel_nl : exercise.titel_en} – ${t.endPositionAlt}`}
+                  className="h-40 w-full rounded-xl object-cover"
                 />
               ) : (
                 <MediaPlaceholder label={t.videoPlaceholder} />
