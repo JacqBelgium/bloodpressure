@@ -277,7 +277,7 @@ export default async function Home() {
                 <img
                   src={exercise.foto_url}
                   alt={`${lang === "nl" ? exercise.titel_nl : exercise.titel_en} – ${t.startPositionAlt}`}
-                  className="h-40 w-full rounded-xl object-cover"
+                  className="aspect-square w-full rounded-xl bg-slate-50 object-contain"
                 />
               ) : (
                 <MediaPlaceholder label={t.photoPlaceholder} />
@@ -295,7 +295,7 @@ export default async function Home() {
                 <img
                   src={exercise.foto_url_eind}
                   alt={`${lang === "nl" ? exercise.titel_nl : exercise.titel_en} – ${t.endPositionAlt}`}
-                  className="h-40 w-full rounded-xl object-cover"
+                  className="aspect-square w-full rounded-xl bg-slate-50 object-contain"
                 />
               ) : (
                 <MediaPlaceholder label={t.videoPlaceholder} />
