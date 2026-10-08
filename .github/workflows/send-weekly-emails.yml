@@ -13,4 +13,36 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -sS -w "\nHTTP status: %{http_code}\n" -X POST "https://bloodpressure.vandersteen.be/api/send-weekly-emails" -H "Authorization: Bearer $CRON_SECRET"
+          set -euo pipefail
+
+          response_file="response.json"
+          http_status=$(curl -sS -w "%{http_code}" -o "$response_file" -X POST "https://bloodpressure.vandersteen.be/api/send-weekly-emails" -H "Authorization: Bearer $CRON_SECRET")
+
+          echo "HTTP status: $http_status"
+          echo "Response body:"
+          cat "$response_file"
+          echo
+
+          if [ "$http_status" != "200" ]; then
+            echo "FOUT: HTTP-status was $http_status in plaats van 200." >&2
+            exit 1
+          fi
+
+          if ! jq empty "$response_file" >/dev/null 2>&1; then
+            echo "FOUT: het antwoord is geen geldige JSON." >&2
+            exit 1
+          fi
+
+          failed_count=$(jq -r '.failed // 0' "$response_file")
+          if ! jq -e 'type == "number" and . >= 0' <<< "$failed_count" >/dev/null 2>&1; then
+            echo "FOUT: het veld 'failed' ontbreekt of is geen getal." >&2
+            exit 1
+          fi
+
+          if [ "$failed_count" -gt 0 ]; then
+            echo "FOUT: $failed_count van $(jq -r '.total // 0' "$response_file") e-mails zijn mislukt." >&2
+            exit 1
+          fi
+
+          echo "OK: alle e-mails zijn succesvol verwerkt."
+          rm -f "$response_file"
