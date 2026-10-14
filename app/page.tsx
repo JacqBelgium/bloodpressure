@@ -4,6 +4,8 @@ import { RegisterForm } from "@/components/RegisterForm";
 import { createClient } from "@/lib/supabase/server";
 import { detectLangFromAcceptHeader, type Lang } from "@/lib/lang";
 import { formatWeekRange, getIsoWeekNumber, getIsoWeekRange } from "@/lib/date";
+import { SessionPlayer } from "@/components/SessionPlayer";
+import type { SessionAudioFragment, SessionExercise, SessionVoice } from "@/lib/session-plan";
 
 type Exercise = {
   id: string;
@@ -39,9 +41,10 @@ const copy: Record<Lang, Record<string, string>> = {
     disclaimer:
       "Deze oefeningen zijn een aanvulling op — niet een vervanging van — voorgeschreven medicatie. Volg altijd de adviezen van je behandelende arts of specialist.",
     exerciseIntro: "Uw oefening voor week",
+    adminExerciseLabel: "oefening",
     welcome: "Hallo",
     startPosition: "Beginpositie",
-    movement: "Beweging",
+    movement: "Uitvoering",
     details: "Details",
     type: "Type",
     duration: "Duur",
@@ -72,9 +75,10 @@ const copy: Record<Lang, Record<string, string>> = {
     disclaimer:
       "These exercises are a complement to — not a replacement for — prescribed medication. Always follow the advice of your treating doctor or specialist.",
     exerciseIntro: "Your exercise for week",
+    adminExerciseLabel: "exercise",
     welcome: "Hello",
     startPosition: "Starting position",
-    movement: "Movement",
+    movement: "Execution",
     details: "Details",
     type: "Type",
     duration: "Duration",
@@ -98,6 +102,17 @@ const copy: Record<Lang, Record<string, string>> = {
       "If you experience problems or pain while performing an exercise, please consult your doctor. We are not liable for any damages resulting from the use of these exercises.",
   },
 };
+
+const EXERCISE_COLUMNS =
+  "id, nummer, titel_nl, titel_en, beginpositie_nl, beginpositie_en, beweging_nl, beweging_en, type, duur, reeksen, intensiteit, rust, sets_structure, detail_nl, detail_en, foto_url, foto_url_eind, video_url, audio_url_nl, audio_url_en, bron";
+const MIN_EXERCISE_NUMBER = 1;
+const MAX_EXERCISE_NUMBER = 20;
+
+function parseExerciseNumber(value: string | string[] | undefined): number | null {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return parsed >= MIN_EXERCISE_NUMBER && parsed <= MAX_EXERCISE_NUMBER ? parsed : null;
+}
 
 const META_ANALYSIS_URL = "https://pmc.ncbi.nlm.nih.gov/articles/PMC12989405/";
 const EXERCISE_COMPARISON_URL = "https://pubmed.ncbi.nlm.nih.gov/37491419/";
@@ -124,7 +139,14 @@ function MediaPlaceholder({ label }: { label: string }) {
   );
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ test?: string | string[] | undefined; oefening?: string | string[] | undefined }>;
+}) {
+  const query = await searchParams;
+  const testRequested = query.test === "1";
+
   if (
     !process.env.NEXT_PUBLIC_SUPABASE_URL ||
     !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
@@ -201,7 +223,7 @@ export default async function Home() {
 
   const { data: profile, error: profileError } = await supabase
     .from("users")
-    .select("voornaam, taal_voorkeur")
+    .select("voornaam, taal_voorkeur, stem_voorkeur")
     .eq("email", user.email)
     .maybeSingle();
 
@@ -215,28 +237,109 @@ export default async function Home() {
   }
 
   const lang: Lang = profile?.taal_voorkeur === "en" ? "en" : "nl";
+  const voice: SessionVoice = profile?.stem_voorkeur === "man" ? "man" : "vrouw";
+  const isAdmin = Boolean(
+    process.env.ADMIN_EMAIL
+      && user.email
+      && user.email.toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase(),
+  );
+  const testMode = Boolean(testRequested && isAdmin);
+  // Admin-only test override: ?test=1&oefening=<1-20> shows that exercise instead of this week's.
+  const testExerciseNumber = testMode ? parseExerciseNumber(query.oefening) : null;
   const t = copy[lang];
 
   let exercise: Exercise | null | undefined;
   let exerciseLoadError = false;
 
   try {
-    const { data: rpcData, error: rpcError } = await supabase.rpc(
-      "get_current_exercise",
-    );
+    if (testExerciseNumber !== null) {
+      const { data: testData, error: testError } = await supabase
+        .from("exercises")
+        .select(EXERCISE_COLUMNS)
+        .eq("nummer", testExerciseNumber)
+        .maybeSingle();
 
-    if (rpcError) {
-      console.error("[home] get_current_exercise RPC failed:", rpcError.message);
-      exerciseLoadError = true;
+      if (testError) {
+        console.error("[home] Test exercise lookup failed:", testError.message);
+        exerciseLoadError = true;
+      } else {
+        exercise = testData as Exercise | null;
+      }
     } else {
-      exercise = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as
-        | Exercise
-        | null
-        | undefined;
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        "get_current_exercise",
+      );
+
+      if (rpcError) {
+        console.error("[home] get_current_exercise RPC failed:", rpcError.message);
+        exerciseLoadError = true;
+      } else {
+        exercise = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as
+          | Exercise
+          | null
+          | undefined;
+      }
     }
   } catch (err) {
     console.error("[home] get_current_exercise threw unexpectedly:", err);
     exerciseLoadError = true;
+  }
+
+  let sessionExercise: SessionExercise | null = null;
+  let sessionFragments: SessionAudioFragment[] = [];
+  if (exercise) {
+    const { data: timerData, error: timerError } = await supabase
+      .from("exercises")
+      .select("sets, per_kant, hold_seconden, rondes, rust_seconden, halverwege_variant")
+      .eq("nummer", exercise.nummer)
+      .maybeSingle();
+
+    if (timerError || !timerData) {
+      console.error("[home] Could not load exercise timer configuration:", timerError?.message ?? "No exercise row");
+    } else {
+      sessionExercise = {
+        nummer: exercise.nummer,
+        sets: Number(timerData.sets ?? exercise.reeksen ?? 4),
+        per_kant: timerData.per_kant === true,
+        hold_seconden: timerData.hold_seconden == null ? null : Number(timerData.hold_seconden),
+        rondes: Number(timerData.rondes ?? 1),
+        rust_seconden: Number(timerData.rust_seconden ?? 60),
+        halverwege_variant: timerData.halverwege_variant ?? "default",
+      };
+
+      const [sharedResult, introResult] = await Promise.all([
+        supabase
+          .from("audio_fragments")
+          .select("key, lang, voice, variant, text, url")
+          .eq("lang", lang)
+          .eq("voice", voice),
+        supabase
+          .from("audio_intro_fragments")
+          .select("exercise_nummer, lang, voice, text, url")
+          .eq("exercise_nummer", exercise.nummer)
+          .eq("lang", lang)
+          .eq("voice", voice),
+      ]);
+
+      if (sharedResult.error) {
+        console.error("[home] Could not load shared audio fragments:", sharedResult.error.message);
+      }
+      if (introResult.error) {
+        console.error("[home] Could not load intro audio fragments:", introResult.error.message);
+      }
+      sessionFragments = [
+        ...(sharedResult.data ?? []).map((fragment) => ({
+          ...fragment,
+          lang: fragment.lang as Lang,
+          voice: fragment.voice === "man" ? "man" as const : "vrouw" as const,
+        })),
+        ...(introResult.data ?? []).map((fragment) => ({
+          ...fragment,
+          lang: fragment.lang as Lang,
+          voice: fragment.voice === "man" ? "man" as const : "vrouw" as const,
+        })),
+      ];
+    }
   }
 
   const now = new Date();
@@ -266,58 +369,18 @@ export default async function Home() {
           <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-teal-100 sm:p-8">
             <div className="rounded-2xl bg-amber-50 p-5 text-lg font-medium text-amber-900 ring-1 ring-amber-200">
               {t.exerciseIntro} {isoWeekNumber}, {weekRangeLabel}
+              {isAdmin && ` (${t.adminExerciseLabel} ${exercise.nummer})`}
             </div>
             <h2 className="mt-6 text-3xl font-semibold text-slate-800">
               {lang === "nl" ? exercise.titel_nl : exercise.titel_en}
+              {testMode && (
+                <span className="ml-2 inline-block rounded-full bg-amber-100 px-3 py-1 align-middle text-base font-semibold text-amber-900">
+                  ({t.adminExerciseLabel} {exercise.nummer})
+                </span>
+              )}
             </h2>
 
-            <div className="mt-6 grid gap-6 sm:grid-cols-3">
-              {exercise.foto_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={exercise.foto_url}
-                  alt={`${lang === "nl" ? exercise.titel_nl : exercise.titel_en} – ${t.startPositionAlt}`}
-                  className="aspect-square w-full rounded-xl bg-slate-50 object-contain"
-                />
-              ) : (
-                <MediaPlaceholder label={t.photoPlaceholder} />
-              )}
-
-              {/* Fallback order: video, then end-position photo, then placeholder. */}
-              {exercise.video_url ? (
-                <video
-                  controls
-                  className="h-40 w-full rounded-xl bg-black object-cover"
-                  src={exercise.video_url}
-                />
-              ) : exercise.foto_url_eind ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={exercise.foto_url_eind}
-                  alt={`${lang === "nl" ? exercise.titel_nl : exercise.titel_en} – ${t.endPositionAlt}`}
-                  className="aspect-square w-full rounded-xl bg-slate-50 object-contain"
-                />
-              ) : (
-                <MediaPlaceholder label={t.videoPlaceholder} />
-              )}
-
-              {(lang === "nl" ? exercise.audio_url_nl : exercise.audio_url_en) ? (
-                <div className="flex h-40 flex-col items-center justify-center gap-3 rounded-xl border border-teal-100 bg-teal-50/50 p-4">
-                  <span className="text-base text-slate-600">{t.audio}</span>
-                  <audio
-                    controls
-                    className="w-full"
-                    src={
-                      lang === "nl" ? exercise.audio_url_nl! : exercise.audio_url_en!
-                    }
-                  />
-                </div>
-              ) : (
-                <MediaPlaceholder label={t.audioPlaceholder} />
-              )}
-            </div>
-
-            <dl className="mt-8 space-y-5">
+            <dl className="mt-6 space-y-5">
               {(lang === "nl" ? exercise.beginpositie_nl : exercise.beginpositie_en) && (
                 <div>
                   <dt className="text-base font-semibold text-slate-700">
@@ -403,6 +466,55 @@ export default async function Home() {
               <p className="mt-8 text-sm text-slate-400">
                 {t.source}: {exercise.bron}
               </p>
+            )}
+
+            <div className="mt-8 grid gap-6 sm:grid-cols-2">
+              {exercise.foto_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={exercise.foto_url}
+                  alt={`${lang === "nl" ? exercise.titel_nl : exercise.titel_en} – ${t.startPositionAlt}`}
+                  className="aspect-square w-full rounded-xl bg-slate-50 object-contain"
+                />
+              ) : (
+                <MediaPlaceholder label={t.photoPlaceholder} />
+              )}
+
+              {/* Fallback order: video, then end-position photo, then placeholder. */}
+              {exercise.video_url ? (
+                <video
+                  controls
+                  className="h-40 w-full rounded-xl bg-black object-cover"
+                  src={exercise.video_url}
+                />
+              ) : exercise.foto_url_eind ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={exercise.foto_url_eind}
+                  alt={`${lang === "nl" ? exercise.titel_nl : exercise.titel_en} – ${t.endPositionAlt}`}
+                  className="aspect-square w-full rounded-xl bg-slate-50 object-contain"
+                />
+              ) : (
+                <MediaPlaceholder label={t.videoPlaceholder} />
+              )}
+
+            </div>
+
+            {sessionExercise ? (
+              <SessionPlayer
+                exercise={{
+                  ...sessionExercise,
+                  titel: lang === "nl" ? exercise.titel_nl : exercise.titel_en,
+                }}
+                fragments={sessionFragments}
+                lang={lang}
+                voice={voice}
+                testMode={testMode}
+              />
+            ) : (
+              <div className="mt-8">
+                <MediaPlaceholder label={t.audioPlaceholder} />
+              </div>
             )}
           </div>
         )}
