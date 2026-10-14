@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { loginUser } from "@/app/login/actions";
 import { createClient } from "@/lib/supabase/client";
 import type { Lang } from "@/lib/lang";
@@ -54,6 +55,7 @@ export function LoginForm() {
   const [status, setStatus] = useState<"idle" | "ok" | "not_found">("idle");
   const [sessionDetected, setSessionDetected] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   useEffect(() => {
     const browserLang = navigator.language?.toLowerCase() ?? "";
@@ -112,7 +114,7 @@ export function LoginForm() {
           <button
             type="button"
             onClick={() => {
-              window.location.href = "/";
+              router.push("/");
             }}
             className="mt-6 w-full rounded-xl bg-teal-600 px-4 py-3 text-lg font-semibold text-white transition-colors hover:bg-teal-700"
           >

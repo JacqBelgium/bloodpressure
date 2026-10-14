@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { registerUser } from "@/app/register/actions";
 import { createClient } from "@/lib/supabase/client";
 import type { Lang } from "@/lib/lang";
+
+type StemVoorkeur = "vrouw" | "man";
 
 // How often to check, from this tab, whether the user has already
 // signed in elsewhere (e.g. by opening the magic link in a new tab).
@@ -20,6 +23,9 @@ const copy: Record<Lang, Record<string, string>> = {
     language: "Taalvoorkeur",
     dutch: "Nederlands",
     english: "English",
+    voice: "Stemkeuze",
+    femaleVoice: "Vrouwelijke stem",
+    maleVoice: "Mannelijke stem",
     submit: "Aanmelden",
     submitting: "Bezig...",
     error: "Er ging iets mis. Probeer het opnieuw.",
@@ -39,6 +45,9 @@ const copy: Record<Lang, Record<string, string>> = {
     language: "Language preference",
     dutch: "Nederlands",
     english: "English",
+    voice: "Voice preference",
+    femaleVoice: "Female voice",
+    maleVoice: "Male voice",
     submit: "Register",
     submitting: "Please wait...",
     error: "Something went wrong. Please try again.",
@@ -52,12 +61,14 @@ const copy: Record<Lang, Record<string, string>> = {
 
 export function RegisterForm() {
   const [lang, setLang] = useState<Lang>("nl");
+  const [stemVoorkeur, setStemVoorkeur] = useState<StemVoorkeur>("vrouw");
   const [voornaam, setVoornaam] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [sessionDetected, setSessionDetected] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   useEffect(() => {
     // navigator.language is only available client-side; reading it here
@@ -99,7 +110,12 @@ export function RegisterForm() {
     e.preventDefault();
     setError(null);
     startTransition(async () => {
-      const result = await registerUser({ voornaam, email, taalVoorkeur: lang });
+      const result = await registerUser({
+        voornaam,
+        email,
+        taalVoorkeur: lang,
+        stemVoorkeur,
+      });
       if (result.status === "error") {
         console.error("[RegisterForm] registerUser returned an error:", result.message);
         setError(t.error);
@@ -118,7 +134,7 @@ export function RegisterForm() {
           <button
             type="button"
             onClick={() => {
-              window.location.href = "/";
+              router.push("/");
             }}
             className="mt-6 w-full rounded-xl bg-teal-600 px-4 py-3 text-lg font-semibold text-white transition-colors hover:bg-teal-700"
           >
@@ -191,6 +207,36 @@ export function RegisterForm() {
               }`}
             >
               {t.english}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <span className="block text-lg font-medium text-slate-700">{t.voice}</span>
+          <div className="mt-2 flex gap-3">
+            <button
+              type="button"
+              onClick={() => setStemVoorkeur("vrouw")}
+              aria-pressed={stemVoorkeur === "vrouw"}
+              className={`flex-1 rounded-xl border px-4 py-3 text-lg font-medium transition-colors ${
+                stemVoorkeur === "vrouw"
+                  ? "border-teal-600 bg-teal-600 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-teal-50"
+              }`}
+            >
+              {t.femaleVoice}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStemVoorkeur("man")}
+              aria-pressed={stemVoorkeur === "man"}
+              className={`flex-1 rounded-xl border px-4 py-3 text-lg font-medium transition-colors ${
+                stemVoorkeur === "man"
+                  ? "border-teal-600 bg-teal-600 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-teal-50"
+              }`}
+            >
+              {t.maleVoice}
             </button>
           </div>
         </div>

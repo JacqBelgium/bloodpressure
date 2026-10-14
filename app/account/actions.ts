@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 export type UpdateAccountInput = {
   voornaam: string;
   taalVoorkeur: "nl" | "en";
+  stemVoorkeur: "vrouw" | "man";
 };
 
 export type UpdateAccountResult = { status: "ok" } | { status: "error"; message: string };
@@ -34,7 +35,11 @@ export async function updateAccount(input: UpdateAccountInput): Promise<UpdateAc
   const admin = createAdminClient();
   const { error } = await admin
     .from("users")
-    .update({ voornaam, taal_voorkeur: input.taalVoorkeur })
+    .update({
+      voornaam,
+      taal_voorkeur: input.taalVoorkeur,
+      stem_voorkeur: input.stemVoorkeur,
+    })
     .eq("email", user.email);
 
   if (error) {

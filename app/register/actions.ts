@@ -8,6 +8,7 @@ export type RegisterInput = {
   voornaam: string;
   email: string;
   taalVoorkeur: "nl" | "en";
+  stemVoorkeur: "vrouw" | "man";
 };
 
 export type RegisterResult = { status: "ok" } | { status: "error"; message: string };
@@ -30,7 +31,12 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
   const { data: dbData, error: dbError } = await admin
     .from("users")
     .upsert(
-      { email, voornaam, taal_voorkeur: input.taalVoorkeur },
+      {
+        email,
+        voornaam,
+        taal_voorkeur: input.taalVoorkeur,
+        stem_voorkeur: input.stemVoorkeur,
+      },
       { onConflict: "email" },
     )
     .select();

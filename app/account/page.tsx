@@ -14,7 +14,7 @@ export default async function AccountPage() {
 
   const { data: profile, error: profileError } = await supabase
     .from("users")
-    .select("voornaam, taal_voorkeur")
+    .select("voornaam, taal_voorkeur, stem_voorkeur")
     .eq("email", user.email)
     .maybeSingle();
 
@@ -33,6 +33,7 @@ export default async function AccountPage() {
         email={user.email ?? ""}
         voornaam={profile?.voornaam ?? ""}
         taalVoorkeur={profile?.taal_voorkeur === "en" ? "en" : "nl"}
+        stemVoorkeur={profile?.stem_voorkeur === "man" ? "man" : "vrouw"}
       />
     </main>
   );

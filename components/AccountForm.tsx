@@ -5,6 +5,8 @@ import Link from "next/link";
 import { updateAccount } from "@/app/account/actions";
 import type { Lang } from "@/lib/lang";
 
+type StemVoorkeur = "vrouw" | "man";
+
 const copy: Record<Lang, Record<string, string>> = {
   nl: {
     heading: "Mijn account",
@@ -13,6 +15,9 @@ const copy: Record<Lang, Record<string, string>> = {
     language: "Taalvoorkeur",
     dutch: "Nederlands",
     english: "English",
+    voice: "Stemkeuze",
+    femaleVoice: "Vrouwelijke stem",
+    maleVoice: "Mannelijke stem",
     save: "Opslaan",
     saving: "Bezig...",
     saved: "Wijzigingen opgeslagen.",
@@ -26,6 +31,9 @@ const copy: Record<Lang, Record<string, string>> = {
     language: "Language preference",
     dutch: "Nederlands",
     english: "English",
+    voice: "Voice preference",
+    femaleVoice: "Female voice",
+    maleVoice: "Male voice",
     save: "Save",
     saving: "Saving...",
     saved: "Changes saved.",
@@ -38,12 +46,15 @@ export function AccountForm({
   email,
   voornaam: initialVoornaam,
   taalVoorkeur: initialTaalVoorkeur,
+  stemVoorkeur: initialStemVoorkeur,
 }: {
   email: string;
   voornaam: string;
   taalVoorkeur: Lang;
+  stemVoorkeur: StemVoorkeur;
 }) {
   const [lang, setLang] = useState<Lang>(initialTaalVoorkeur);
+  const [stemVoorkeur, setStemVoorkeur] = useState<StemVoorkeur>(initialStemVoorkeur);
   const [voornaam, setVoornaam] = useState(initialVoornaam);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -56,7 +67,11 @@ export function AccountForm({
     setError(null);
     setSaved(false);
     startTransition(async () => {
-      const result = await updateAccount({ voornaam, taalVoorkeur: lang });
+      const result = await updateAccount({
+        voornaam,
+        taalVoorkeur: lang,
+        stemVoorkeur,
+      });
       if (result.status === "error") {
         console.error("[AccountForm] updateAccount returned an error:", result.message);
         setError(t.error);
@@ -127,6 +142,42 @@ export function AccountForm({
               }`}
             >
               {t.english}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <span className="block text-lg font-medium text-slate-700">{t.voice}</span>
+          <div className="mt-2 flex gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setStemVoorkeur("vrouw");
+                setSaved(false);
+              }}
+              aria-pressed={stemVoorkeur === "vrouw"}
+              className={`flex-1 rounded-xl border px-4 py-3 text-lg font-medium transition-colors ${
+                stemVoorkeur === "vrouw"
+                  ? "border-teal-600 bg-teal-600 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-teal-50"
+              }`}
+            >
+              {t.femaleVoice}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStemVoorkeur("man");
+                setSaved(false);
+              }}
+              aria-pressed={stemVoorkeur === "man"}
+              className={`flex-1 rounded-xl border px-4 py-3 text-lg font-medium transition-colors ${
+                stemVoorkeur === "man"
+                  ? "border-teal-600 bg-teal-600 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-teal-50"
+              }`}
+            >
+              {t.maleVoice}
             </button>
           </div>
         </div>
