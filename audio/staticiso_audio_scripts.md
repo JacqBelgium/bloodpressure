@@ -46,6 +46,16 @@ De groet bestaat uit twee delen: eerst de begroeting met naam (live, per sessie)
 - NL: En houd vast.
 - EN: And hold.
 
+### Start eindpositie
+- NL: Ga nu naar de eindpositie en houd vast.
+- EN: Now move into the end position and hold.
+
+### Start langzame beweging
+- NL: Begin nu. Heel langzaam en gecontroleerd.
+- EN: Begin now. Very slowly and with control.
+
+`start_hold` blijft als legacy-fragment behouden, maar wordt niet gebruikt door de nieuwe sessieplanner.
+
 ### Halverwege (standaard)
 - NL: Halverwege. Blijf rustig ademhalen.
 - EN: Halfway. Keep breathing calmly.
