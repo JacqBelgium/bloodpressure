@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
 import { formatWeekRange, getIsoWeekNumber, getIsoWeekRange } from "@/lib/date";
 import { escapeHtml } from "@/lib/html";
-import type { Lang } from "@/lib/lang";
+import { parseLang, type Lang } from "@/lib/lang";
 
 const SITE_URL = "https://bloodpressure.vandersteen.be";
 
@@ -71,11 +71,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Test options: ?only=<email> sends to that one existing user only, and
+  // ?lang=en|nl (only together with ?only) forces the language of that email.
+  const onlyParam = request.nextUrl.searchParams.get("only");
+  const only = onlyParam?.trim().toLowerCase() || null;
+  const langParam = request.nextUrl.searchParams.get("lang");
+  const forcedLang = only ? parseLang(langParam) : null;
+
+  if (onlyParam !== null && !only) {
+    return NextResponse.json({ error: "Parameter 'only' is empty" }, { status: 400 });
+  }
+  if (only && langParam !== null && !forcedLang) {
+    return NextResponse.json({ error: `Invalid lang '${langParam}', use 'en' or 'nl'` }, { status: 400 });
+  }
+
   const admin = createAdminClient();
 
-  const { data: users, error: usersError } = await admin
-    .from("users")
-    .select("email, voornaam, taal_voorkeur");
+  let usersQuery = admin.from("users").select("email, voornaam, taal_voorkeur");
+  if (only) usersQuery = usersQuery.eq("email", only);
+  const { data: users, error: usersError } = await usersQuery;
 
   if (usersError) {
     console.error("[send-weekly-emails] Failed to fetch users:", {
@@ -85,6 +99,10 @@ export async function POST(request: NextRequest) {
       code: usersError.code,
     });
     return NextResponse.json({ error: usersError.message }, { status: 500 });
+  }
+
+  if (only && (users ?? []).length === 0) {
+    return NextResponse.json({ error: `No registered user with email '${only}'` }, { status: 404 });
   }
 
   const { data: rpcData, error: rpcError } = await admin.rpc("get_current_exercise");
@@ -117,7 +135,7 @@ export async function POST(request: NextRequest) {
   const failures: { email: string; reason: string }[] = [];
 
   for (const user of users ?? []) {
-    const lang: Lang = user.taal_voorkeur === "en" ? "en" : "nl";
+    const lang: Lang = forcedLang ?? (user.taal_voorkeur === "en" ? "en" : "nl");
     const weekRangeLabel = formatWeekRange(start, end, lang);
     const title = lang === "nl" ? exercise.titel_nl : exercise.titel_en;
 
