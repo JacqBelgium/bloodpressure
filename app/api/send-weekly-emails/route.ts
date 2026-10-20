@@ -123,18 +123,16 @@ export async function POST(request: NextRequest) {
 
     // A plain link to the site would land the user on the login/register
     // screen if the email client opens it without the browser's existing
-    // session cookies (common with Gmail etc.). Generating a real,
-    // single-use magic link per recipient means the link itself signs
-    // the user in, regardless of session state, straight to /auth/callback.
+    // session cookies (common with Gmail etc.). A single-use token per
+    // recipient signs the user in via /auth/confirm, regardless of session
+    // state. The language travels along so a failed sign-in still lands on
+    // a login page in the recipient's language.
     const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
       type: "magiclink",
       email: user.email,
-      options: {
-        redirectTo: `${SITE_URL}/auth/callback`,
-      },
     });
 
-    if (linkError || !linkData?.properties?.action_link) {
+    if (linkError || !linkData?.properties?.hashed_token) {
       const reason = linkError?.message ?? "Failed to generate magic link";
       console.error(`[send-weekly-emails] Failed to generate link for ${user.email}:`, reason, linkError);
       failures.push({ email: user.email, reason });
@@ -151,7 +149,11 @@ export async function POST(request: NextRequest) {
           isoWeekNumber,
           weekRangeLabel,
           lang,
-          ctaLink: linkData.properties.action_link,
+          ctaLink: `${SITE_URL}/auth/confirm?${new URLSearchParams({
+            token_hash: linkData.properties.hashed_token,
+            type: "magiclink",
+            lang,
+          })}`,
         }),
       });
       sent += 1;

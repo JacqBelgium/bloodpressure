@@ -28,6 +28,7 @@ const copy: Record<Lang, Record<string, string>> = {
     successBody:
       "We hebben je een inloglink gestuurd. Open je e-mail en klik op de link om verder te gaan.",
     continueButton: "Je bent ingelogd — klik hier om verder te gaan",
+    linkExpired: "Deze link is verlopen of al gebruikt. Vraag hieronder een nieuwe inloglink aan.",
   },
   en: {
     heading: "Log in",
@@ -45,11 +46,18 @@ const copy: Record<Lang, Record<string, string>> = {
     successBody:
       "We've sent you a login link. Open your email and click the link to continue.",
     continueButton: "You're logged in — click here to continue",
+    linkExpired: "This link has expired or has already been used. Request a new login link below.",
   },
 };
 
-export function LoginForm() {
-  const [lang, setLang] = useState<Lang>("nl");
+export function LoginForm({
+  initialLang,
+  linkExpired = false,
+}: {
+  initialLang: Lang | null;
+  linkExpired?: boolean;
+}) {
+  const [lang, setLang] = useState<Lang>(initialLang ?? "nl");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "ok" | "not_found">("idle");
@@ -58,12 +66,14 @@ export function LoginForm() {
   const router = useRouter();
 
   useEffect(() => {
+    // An explicit ?lang= (e.g. from the weekly email) wins over the browser language.
+    if (initialLang) return;
     const browserLang = navigator.language?.toLowerCase() ?? "";
     if (browserLang.startsWith("en")) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLang("en");
     }
-  }, []);
+  }, [initialLang]);
 
   useEffect(() => {
     if (status !== "ok") return;
@@ -144,6 +154,12 @@ export function LoginForm() {
     <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm ring-1 ring-teal-100 sm:p-10">
       <h1 className="text-3xl font-semibold text-slate-800">{t.heading}</h1>
       <p className="mt-2 text-lg text-slate-600">{t.subheading}</p>
+
+      {linkExpired && (
+        <p role="status" className="mt-6 rounded-xl bg-amber-50 p-4 text-base font-medium text-amber-900 ring-1 ring-amber-200">
+          {t.linkExpired}
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-6">
         <div>

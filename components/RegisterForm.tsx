@@ -59,8 +59,8 @@ const copy: Record<Lang, Record<string, string>> = {
   },
 };
 
-export function RegisterForm() {
-  const [lang, setLang] = useState<Lang>("nl");
+export function RegisterForm({ initialLang = null }: { initialLang?: Lang | null }) {
+  const [lang, setLang] = useState<Lang>(initialLang ?? "nl");
   const [stemVoorkeur, setStemVoorkeur] = useState<StemVoorkeur>("vrouw");
   const [voornaam, setVoornaam] = useState("");
   const [email, setEmail] = useState("");
@@ -73,12 +73,14 @@ export function RegisterForm() {
   useEffect(() => {
     // navigator.language is only available client-side; reading it here
     // (rather than in state's initializer) avoids a server/client render mismatch.
+    // An explicit ?lang= wins over the browser language.
+    if (initialLang) return;
     const browserLang = navigator.language?.toLowerCase() ?? "";
     if (browserLang.startsWith("en")) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLang("en");
     }
-  }, []);
+  }, [initialLang]);
 
   useEffect(() => {
     if (!submitted) return;
