@@ -11,11 +11,21 @@ export const STYLE_PROMPT = {
 };
 
 export const STT_COST_PER_MINUTE_USD = 0.024;
+// Synchronous recognize accepts at most 60 s; keep a margin.
+export const STT_MAX_PART_SECONDS = 59;
+
+// Fixed speech-recognition spellings that count as the expected words.
+const transcriptionVariants = new Map([
+  ["spanje", ["span", "je"]],
+  ["zolang", ["zo", "lang"]],
+  ["houdt", ["houd"]],
+  ["knieënsteun", ["knieën", "steun"]],
+]);
 
 export function normalizeWords(value) {
   const digitWords = {
     nl: new Map([
-      ["een", "1"], ["één", "1"], ["eerste", "1"],
+      ["een", "1"], ["één", "1"],
       ["twee", "2"], ["tweede", "2"],
       ["drie", "3"], ["derde", "3"],
       ["vier", "4"], ["vierde", "4"],
@@ -40,6 +50,7 @@ export function normalizeWords(value) {
     .trim()
     .split(/\s+/u)
     .filter(Boolean)
+    .flatMap((word) => transcriptionVariants.get(word) ?? [word])
     .map((word) => {
       const setNumber = word.match(/^z([1-4])$/u);
       return setNumber?.[1] ?? digitWords.nl.get(word) ?? digitWords.en.get(word) ?? word;
@@ -254,6 +265,10 @@ export function getWordDifferences(expectedWords, actualWords) {
   let actualIndex = actualWords.length;
   const expectedOnly = [];
   const actualOnly = [];
+  // Longest run of consecutive expected words that were not heard at all
+  // (deletions only; words heard differently do not count).
+  let missingRun = [];
+  let longestMissingRun = [];
   while (expectedIndex > 0 || actualIndex > 0) {
     if (expectedIndex > 0 && actualIndex > 0
       && expectedWords[expectedIndex - 1] === actualWords[actualIndex - 1]
@@ -268,16 +283,21 @@ export function getWordDifferences(expectedWords, actualWords) {
       actualIndex -= 1;
     } else if (expectedIndex > 0 && rows[expectedIndex][actualIndex] === rows[expectedIndex - 1][actualIndex] + 1) {
       expectedOnly.push(expectedWords[expectedIndex - 1]);
+      missingRun.unshift(expectedWords[expectedIndex - 1]);
+      if (missingRun.length > longestMissingRun.length) longestMissingRun = [...missingRun];
       expectedIndex -= 1;
+      continue;
     } else {
       actualOnly.push(actualWords[actualIndex - 1]);
       actualIndex -= 1;
     }
+    missingRun = [];
   }
   return {
     count: rows[expectedWords.length][actualWords.length],
     expectedOnly: expectedOnly.reverse(),
     actualOnly: actualOnly.reverse(),
+    longestMissingRun,
   };
 }
 
@@ -299,12 +319,13 @@ function levenshtein(left, right) {
   return row[right.length];
 }
 
-export function getMp3DurationSeconds(bytes) {
+// Reads MPEG audio layer III frame headers. `bits` is part2_3_length of the first
+// granule/channel: the number of audio data bits, close to zero in silence.
+function readMp3Frames(bytes) {
   const mpeg1Bitrates = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
   const mpeg2Bitrates = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0];
   const sampleRates = [[44100, 48000, 32000], [22050, 24000, 16000], [11025, 12000, 8000]];
-  let duration = 0;
-  let frameCount = 0;
+  const frames = [];
 
   for (let offset = 0; offset + 4 <= bytes.length;) {
     const header = bytes.readUInt32BE(offset);
@@ -329,13 +350,105 @@ export function getMp3DurationSeconds(bytes) {
       + ((header >>> 9) & 1);
     if (offset + frameLength > bytes.length) break;
 
-    duration += (version === 3 ? 1152 : 576) / sampleRate;
-    frameCount += 1;
+    const mono = ((header >>> 6) & 3) === 3;
+    const sideInfoStart = offset + 4 + (((header >>> 16) & 1) === 0 ? 2 : 0);
+    const bitsPosition = version === 3 ? (mono ? 18 : 20) : (mono ? 9 : 10);
+    const byteIndex = sideInfoStart + (bitsPosition >> 3);
+    const window = byteIndex + 3 <= bytes.length
+      ? (bytes[byteIndex] << 16) | (bytes[byteIndex + 1] << 8) | bytes[byteIndex + 2]
+      : 0;
+    frames.push({
+      offset,
+      seconds: (version === 3 ? 1152 : 576) / sampleRate,
+      bits: (window >>> (12 - (bitsPosition & 7))) & 0xfff,
+    });
     offset += frameLength;
   }
 
-  if (frameCount === 0) throw new Error("Could not determine MP3 duration from frame headers.");
-  return duration;
+  if (frames.length === 0) throw new Error("Could not determine MP3 duration from frame headers.");
+  return frames;
+}
+
+export function getMp3DurationSeconds(bytes) {
+  return readMp3Frames(bytes).reduce((total, frame) => total + frame.seconds, 0);
+}
+
+const SILENCE_BITS = 100;
+
+// Silences of at least minSeconds between the first and last non-silent frame
+// (leading and trailing silence are ignored).
+export function findMp3Silences(bytes, minSeconds = 0) {
+  const frames = readMp3Frames(bytes);
+  const first = frames.findIndex((frame) => frame.bits >= SILENCE_BITS);
+  const last = frames.findLastIndex((frame) => frame.bits >= SILENCE_BITS);
+  const silences = [];
+  let start = 0;
+  let runStart = null;
+  let runSeconds = 0;
+  for (let index = 0; index < frames.length; index += 1) {
+    const frame = frames[index];
+    if (index > first && index < last && frame.bits < SILENCE_BITS) {
+      if (runStart === null) { runStart = start; runSeconds = 0; }
+      runSeconds += frame.seconds;
+    } else if (runStart !== null) {
+      if (runSeconds >= minSeconds) silences.push({ start: runStart, seconds: runSeconds });
+      runStart = null;
+    }
+    start += frame.seconds;
+  }
+  return silences;
+}
+
+// Silence in the middle of the speech: longer than 3 s = rejected, longer than
+// 2 s = approved but marked "beluister dit" (listen). Normal pauses are <= ~1.5 s.
+const LISTEN_SILENCE_SECONDS = 2;
+const REJECT_SILENCE_SECONDS = 3;
+
+export function checkSilences(bytes) {
+  const silences = findMp3Silences(bytes, LISTEN_SILENCE_SECONDS);
+  const longest = silences.reduce((max, silence) => (silence.seconds > (max?.seconds ?? 0) ? silence : max), null);
+  return {
+    longestSilenceSeconds: longest?.seconds ?? 0,
+    longestSilenceAt: longest?.start ?? null,
+    reject: (longest?.seconds ?? 0) > REJECT_SILENCE_SECONDS,
+    listen: (longest?.seconds ?? 0) > LISTEN_SILENCE_SECONDS,
+  };
+}
+
+// Splits an MP3 that is too long for one recognize call into two parts at a frame
+// boundary inside the longest silence around the middle (30-70% of the duration,
+// narrowed so that both parts fit within maxPartSeconds).
+export function splitMp3AtSilence(bytes, maxPartSeconds = STT_MAX_PART_SECONDS) {
+  const frames = readMp3Frames(bytes);
+  let start = 0;
+  for (const frame of frames) {
+    frame.start = start;
+    start += frame.seconds;
+  }
+  const total = start;
+  if (total <= maxPartSeconds) return [bytes];
+  if (total > maxPartSeconds * 2) throw new Error(`Audio of ${total.toFixed(1)} s is too long to split into two recognizable parts.`);
+
+  const from = Math.max(total * 0.3, total - maxPartSeconds);
+  const to = Math.min(total * 0.7, maxPartSeconds);
+  const candidates = frames.map((frame, index) => ({ ...frame, index }))
+    .filter((frame) => frame.index > 0 && frame.start >= from && frame.start <= to);
+  if (candidates.length === 0) throw new Error("No split point found within the allowed range.");
+
+
+  let best = null;
+  for (let index = 0; index < candidates.length;) {
+    if (candidates[index].bits >= SILENCE_BITS) { index += 1; continue; }
+    let end = index;
+    while (end + 1 < candidates.length && candidates[end + 1].bits < SILENCE_BITS
+      && candidates[end + 1].index === candidates[end].index + 1) end += 1;
+    if (!best || end - index > best.end - best.start) best = { start: index, end };
+    index = end + 1;
+  }
+  const split = best
+    ? candidates[Math.floor((best.start + best.end) / 2)]
+    : candidates.reduce((quietest, frame) => (frame.bits < quietest.bits ? frame : quietest));
+  return [bytes.subarray(0, split.offset), bytes.subarray(split.offset)];
 }
 
 export function createSpeechClient() {
@@ -360,4 +473,62 @@ export async function transcribeMp3(client, audioBytes, lang) {
     .map((result) => result.alternatives?.[0]?.transcript ?? "")
     .filter(Boolean)
     .join(" ");
+}
+
+// Like transcribeMp3, but audio longer than one recognize call is split at a
+// silence and the two transcripts are joined. Returns the part durations for billing.
+export async function transcribeMp3InParts(client, audioBytes, lang) {
+  const parts = splitMp3AtSilence(audioBytes);
+  const transcripts = [];
+  for (const part of parts) transcripts.push(await transcribeMp3(client, Buffer.from(part), lang));
+  return {
+    transcript: transcripts.filter(Boolean).join(" "),
+    partSeconds: parts.map((part) => getMp3DurationSeconds(Buffer.from(part))),
+  };
+}
+
+const INTRO_MIN_AGREEMENT = 0.9;
+const INTRO_MAX_DURATION_RATIO = 1.7;
+export const MAX_FRAGMENT_SECONDS = 110;
+// Consecutive expected words missing from the transcript: 4 or more = rejected,
+// exactly 3 = approved but marked "beluister dit" (listen).
+const REJECT_CONSECUTIVE_MISSING_WORDS = 4;
+const LISTEN_CONSECUTIVE_MISSING_WORDS = 3;
+const CHARS_PER_SECOND = 14;
+
+export function checkSharedTranscript(expectedText, transcript, lang, durationSeconds = 0) {
+  const check = classifyVerification({ expectedText, transcript }, lang);
+  const tooLong = durationSeconds > MAX_FRAGMENT_SECONDS;
+  const passed = !tooLong && (check.classification === "OK" || check.classification === "NORMAAL");
+  return { agreement: check.agreement, classification: tooLong ? "FAIL: max duration" : check.classification, passed };
+}
+
+// Intros: >= 90% agreement after normalising numbers/degrees, English exercise
+// terms and fixed recognition variants, no wrong language or repetition,
+// duration <= 1.7x expected and at most 110 s, and no run of 4 or more
+// consecutive expected words missing from the transcript.
+export function checkIntroTranscript(expectedText, transcript, lang, durationSeconds) {
+  const expected = normalizeIntroMeaningfulWords(expectedText);
+  const actual = normalizeIntroMeaningfulWords(transcript);
+  const diff = getWordDifferences(expected, actual);
+  const agreement = expected.length === 0 ? 0 : Math.max(0, 1 - diff.count / expected.length);
+  const base = compareTranscript(expectedText, transcript, lang, { minimumAgreement: 0, repetitionRatio: 1.15, repetitionInclusive: false });
+  const durationRatio = durationSeconds / (expectedText.length / CHARS_PER_SECOND);
+  const reasons = [];
+  if (agreement < INTRO_MIN_AGREEMENT) reasons.push("agreement");
+  if (diff.longestMissingRun.length >= REJECT_CONSECUTIVE_MISSING_WORDS) reasons.push("missing words");
+  if (durationRatio > INTRO_MAX_DURATION_RATIO) reasons.push("duration");
+  if (durationSeconds > MAX_FRAGMENT_SECONDS) reasons.push("max duration");
+  if (base.wrongLanguage) reasons.push("language");
+  if (base.tooLong || base.repeatedPhrase) reasons.push("repetition");
+  return {
+    agreement,
+    durationRatio,
+    missingWords: diff.expectedOnly,
+    extraWords: diff.actualOnly,
+    longestMissingRun: diff.longestMissingRun,
+    listen: diff.longestMissingRun.length === LISTEN_CONSECUTIVE_MISSING_WORDS,
+    classification: reasons.length === 0 ? "OK" : `FAIL: ${reasons.join(", ")}`,
+    passed: reasons.length === 0,
+  };
 }
