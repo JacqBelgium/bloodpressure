@@ -266,14 +266,19 @@ export async function POST(request: NextRequest) {
     `[send-weekly-emails] Done (${isoYear}-W${isoWeek}): ${sent} sent, ${skipped} skipped, ${failures.length} failed, ${total} total`,
   );
 
-  return NextResponse.json({
-    iso_year: isoYear,
-    iso_week: isoWeek,
-    log_bypassed: Boolean(only),
-    sent,
-    skipped,
-    failed: failures.length,
-    total,
-    failures,
-  });
+  // Any failed email gives a non-2xx status (502) so the external scheduler
+  // reports the run as failed; the body stays the same. Skipped is not a failure.
+  return NextResponse.json(
+    {
+      iso_year: isoYear,
+      iso_week: isoWeek,
+      log_bypassed: Boolean(only),
+      sent,
+      skipped,
+      failed: failures.length,
+      total,
+      failures,
+    },
+    { status: failures.length > 0 ? 502 : 200 },
+  );
 }
