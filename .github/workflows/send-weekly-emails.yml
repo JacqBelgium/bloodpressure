@@ -1,8 +1,8 @@
 name: Send weekly exercise emails
 
+# Geen eigen schedule meer: een externe planner start de verzending. Dubbele mails
+# worden in de route voorkomen via weekly_send_log. Handmatig starten kan nog steeds.
 on:
-  schedule:
-    - cron: "17 3 * * 1"
   workflow_dispatch: {}
 
 jobs:
@@ -44,5 +44,6 @@ jobs:
             exit 1
           fi
 
-          echo "OK: alle e-mails zijn succesvol verwerkt."
+          # 'skipped' (al verstuurd deze week) is geen fout.
+          echo "OK: alle e-mails zijn succesvol verwerkt ($(jq -r '.sent // 0' "$response_file") verstuurd, $(jq -r '.skipped // 0' "$response_file") overgeslagen)."
           rm -f "$response_file"

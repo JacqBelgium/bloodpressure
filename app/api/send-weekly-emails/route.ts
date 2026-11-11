@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email";
-import { formatWeekRange, getIsoWeekNumber, getIsoWeekRange } from "@/lib/date";
+import { formatWeekRange, getIsoWeekInZone, getIsoWeekRange } from "@/lib/date";
 import { escapeHtml } from "@/lib/html";
 import { parseLang, type Lang } from "@/lib/lang";
 
@@ -71,12 +71,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Test options: ?only=<email> sends to that one existing user only, and
+  // Test options: ?only=<email> sends to that one existing user only and
+  // bypasses weekly_send_log (nothing is checked or written there), and
   // ?lang=en|nl (only together with ?only) forces the language of that email.
+  // ?dryrun=1 only reports who would be emailed or skipped: no email is sent
+  // and nothing is written to the log.
   const onlyParam = request.nextUrl.searchParams.get("only");
   const only = onlyParam?.trim().toLowerCase() || null;
   const langParam = request.nextUrl.searchParams.get("lang");
   const forcedLang = only ? parseLang(langParam) : null;
+  const dryRun = request.nextUrl.searchParams.get("dryrun") === "1";
 
   if (onlyParam !== null && !only) {
     return NextResponse.json({ error: "Parameter 'only' is empty" }, { status: 400 });
@@ -127,14 +131,88 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No current exercise available" }, { status: 500 });
   }
 
-  const now = new Date();
-  const isoWeekNumber = getIsoWeekNumber(now);
-  const { start, end } = getIsoWeekRange(now);
+  // The week is determined in Europe/Brussels, for both the log and the email.
+  const { isoYear, isoWeek, calendarDate } = getIsoWeekInZone(new Date());
+  const isoWeekNumber = isoWeek;
+  const { start, end } = getIsoWeekRange(calendarDate);
+  const allUsers = users ?? [];
+
+  // Users already in the log for this week are skipped (not with ?only).
+  const alreadyLogged = new Set<string>();
+  if (!only) {
+    const { data: logRows, error: logError } = await admin
+      .from("weekly_send_log")
+      .select("user_email")
+      .eq("iso_year", isoYear)
+      .eq("iso_week", isoWeek);
+
+    if (logError) {
+      console.error("[send-weekly-emails] Failed to read weekly_send_log:", {
+        message: logError.message,
+        details: logError.details,
+        hint: logError.hint,
+        code: logError.code,
+      });
+      return NextResponse.json({ error: logError.message }, { status: 500 });
+    }
+    for (const row of logRows ?? []) alreadyLogged.add(row.user_email);
+  }
+
+  const toSend = allUsers.filter((u) => !alreadyLogged.has(u.email));
+  const skippedEmails = allUsers.filter((u) => alreadyLogged.has(u.email)).map((u) => u.email);
+
+  if (dryRun) {
+    return NextResponse.json({
+      dryrun: true,
+      iso_year: isoYear,
+      iso_week: isoWeek,
+      log_bypassed: Boolean(only),
+      would_send: toSend.length,
+      skipped: skippedEmails.length,
+      total: allUsers.length,
+      recipients: toSend.map((u) => u.email),
+      skipped_recipients: skippedEmails,
+    });
+  }
+
+  // Removes a reservation after a failed send, so the next run retries it.
+  async function releaseReservation(email: string): Promise<string | null> {
+    if (only) return null;
+    const { error } = await admin
+      .from("weekly_send_log")
+      .delete()
+      .eq("iso_year", isoYear)
+      .eq("iso_week", isoWeek)
+      .eq("user_email", email);
+    if (error) {
+      console.error(`[send-weekly-emails] Failed to release log entry for ${email}:`, error.message, error);
+      return `; log entry could not be removed (${error.message}), next run will skip this user`;
+    }
+    return null;
+  }
 
   let sent = 0;
   const failures: { email: string; reason: string }[] = [];
 
-  for (const user of users ?? []) {
+  for (const user of toSend) {
+    // Reserve the log entry before sending. The unique constraint on
+    // (iso_year, iso_week, user_email) makes a concurrent run fail here.
+    if (!only) {
+      const { error: reserveError } = await admin
+        .from("weekly_send_log")
+        .insert({ user_email: user.email, iso_year: isoYear, iso_week: isoWeek });
+
+      if (reserveError) {
+        if (reserveError.code === "23505") {
+          skippedEmails.push(user.email);
+          continue;
+        }
+        console.error(`[send-weekly-emails] Failed to reserve log entry for ${user.email}:`, reserveError.message, reserveError);
+        failures.push({ email: user.email, reason: `Log reservation failed: ${reserveError.message}` });
+        continue;
+      }
+    }
+
     const lang: Lang = forcedLang ?? (user.taal_voorkeur === "en" ? "en" : "nl");
     const weekRangeLabel = formatWeekRange(start, end, lang);
     const title = lang === "nl" ? exercise.titel_nl : exercise.titel_en;
@@ -153,7 +231,7 @@ export async function POST(request: NextRequest) {
     if (linkError || !linkData?.properties?.hashed_token) {
       const reason = linkError?.message ?? "Failed to generate magic link";
       console.error(`[send-weekly-emails] Failed to generate link for ${user.email}:`, reason, linkError);
-      failures.push({ email: user.email, reason });
+      failures.push({ email: user.email, reason: reason + ((await releaseReservation(user.email)) ?? "") });
       continue;
     }
 
@@ -178,12 +256,24 @@ export async function POST(request: NextRequest) {
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       console.error(`[send-weekly-emails] Failed to send to ${user.email}:`, reason, err);
-      failures.push({ email: user.email, reason });
+      failures.push({ email: user.email, reason: reason + ((await releaseReservation(user.email)) ?? "") });
     }
   }
 
-  const total = (users ?? []).length;
-  console.error(`[send-weekly-emails] Done: ${sent} sent, ${failures.length} failed, ${total} total`);
+  const total = allUsers.length;
+  const skipped = skippedEmails.length;
+  console.error(
+    `[send-weekly-emails] Done (${isoYear}-W${isoWeek}): ${sent} sent, ${skipped} skipped, ${failures.length} failed, ${total} total`,
+  );
 
-  return NextResponse.json({ sent, failed: failures.length, total, failures });
+  return NextResponse.json({
+    iso_year: isoYear,
+    iso_week: isoWeek,
+    log_bypassed: Boolean(only),
+    sent,
+    skipped,
+    failed: failures.length,
+    total,
+    failures,
+  });
 }
