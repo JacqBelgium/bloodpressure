@@ -1,8 +1,9 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { FileText } from "lucide-react";
 import { RegisterForm } from "@/components/RegisterForm";
 import { createClient } from "@/lib/supabase/server";
-import { detectLangFromAcceptHeader, type Lang } from "@/lib/lang";
+import { detectLangFromAcceptHeader, parseLang, type Lang } from "@/lib/lang";
 import { formatWeekRange, getIsoWeekNumber, getIsoWeekRange } from "@/lib/date";
 import { SessionPlayer } from "@/components/SessionPlayer";
 import type { SessionAudioFragment, SessionExercise, SessionVoice } from "@/lib/session-plan";
@@ -117,6 +118,31 @@ function parseExerciseNumber(value: string | string[] | undefined): number | nul
 const META_ANALYSIS_URL = "https://pmc.ncbi.nlm.nih.gov/articles/PMC12989405/";
 const EXERCISE_COMPARISON_URL = "https://pubmed.ncbi.nlm.nih.gov/37491419/";
 
+type HomeSearchParams = {
+  lang?: string | string[] | undefined;
+  test?: string | string[] | undefined;
+  oefening?: string | string[] | undefined;
+};
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<HomeSearchParams>;
+}): Promise<Metadata> {
+  const query = await searchParams;
+  const headersList = await headers();
+  const lang =
+    parseLang(query.lang) ??
+    detectLangFromAcceptHeader(headersList.get("accept-language"));
+
+  return {
+    title:
+      lang === "nl"
+        ? "StaticIso — Isometrische oefeningen voor bloeddruk"
+        : "StaticIso — Isometric exercises for blood pressure",
+  };
+}
+
 function StudyBadge({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <a
@@ -142,9 +168,13 @@ function MediaPlaceholder({ label }: { label: string }) {
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ test?: string | string[] | undefined; oefening?: string | string[] | undefined }>;
+  searchParams: Promise<HomeSearchParams>;
 }) {
   const query = await searchParams;
+  const headersList = await headers();
+  const pageLang =
+    parseLang(query.lang) ??
+    detectLangFromAcceptHeader(headersList.get("accept-language"));
   const testRequested = query.test === "1";
 
   if (
@@ -172,9 +202,7 @@ export default async function Home({
   } = await supabase.auth.getUser();
 
   if (!user) {
-    const headersList = await headers();
-    const lang = detectLangFromAcceptHeader(headersList.get("accept-language"));
-    const t = copy[lang];
+    const t = copy[pageLang];
     return (
       <main className="flex-1 bg-teal-50 px-4 py-10 sm:px-6">
         <div className="mx-auto max-w-2xl">
@@ -185,7 +213,7 @@ export default async function Home({
             {t.intro}
           </p>
           <p className="mt-4 text-base leading-relaxed text-slate-600 sm:text-lg">
-            {lang === "nl" ? (
+            {pageLang === "nl" ? (
               <>
                 <span className="font-bold">Wetenschappelijk onderzoek bevestigt dit effect:</span>{" "}
                 een meta-analyse van 40 klinische studies toont een gemiddelde bloeddrukdaling van
@@ -203,12 +231,12 @@ export default async function Home({
           </p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <StudyBadge href={META_ANALYSIS_URL}>
-              {lang === "nl"
+              {pageLang === "nl"
                 ? "Meta-analyse: 40 studies, 6,6 mmHg"
                 : "Meta-analysis: 40 trials, 6.6 mmHg"}
             </StudyBadge>
             <StudyBadge href={EXERCISE_COMPARISON_URL}>
-              {lang === "nl"
+              {pageLang === "nl"
                 ? "Vergelijkende studie: 270 onderzoeken"
                 : "Comparison study: 270 trials"}
             </StudyBadge>
@@ -415,7 +443,7 @@ export default async function Home({
               )}
             </dl>
 
-            <div className="mt-8 grid grid-cols-2 gap-4 border-t border-slate-100 pt-6 sm:grid-cols-3">
+            <dl className="mt-8 grid grid-cols-2 gap-4 border-t border-slate-100 pt-6 sm:grid-cols-3">
               {exercise.type && (
                 <div>
                   <dt className="text-sm font-medium text-slate-500">{t.type}</dt>
@@ -460,7 +488,7 @@ export default async function Home({
                   </dd>
                 </div>
               )}
-            </div>
+            </dl>
 
             {exercise.bron && (
               <p className="mt-8 text-sm text-slate-400">

@@ -138,11 +138,13 @@ function getHalfwayKey(variant: string | null): string {
   return `halverwege_${normalizedVariant}`;
 }
 
-function getLabels(lang: Lang) {
+function getLabels(lang: Lang, exerciseNumber: number) {
+  const holdLabel = exerciseNumber >= 10 && exerciseNumber <= 12;
+
   if (lang === "en") {
     return {
       preparation: "Get into the starting position",
-      hold: () => "Hold",
+      hold: () => holdLabel ? "Execution" : "Hold",
       side: () => "Switch sides",
       rest: () => "Rest",
     };
@@ -150,7 +152,7 @@ function getLabels(lang: Lang) {
 
   return {
     preparation: "Neem de beginpositie aan",
-    hold: () => "Houd vast",
+    hold: () => holdLabel ? "Uitvoering" : "Houd vast",
     side: () => "Wissel van kant",
     rest: () => "Rust",
   };
@@ -193,7 +195,7 @@ export function buildSessionPlan(
 
   const holdSeconds = exercise.hold_seconden ?? options.chosenHoldSeconds;
   const random = createSeededRandom(options.randomSeed);
-  const labels = getLabels(options.lang);
+  const labels = getLabels(options.lang, exercise.nummer);
   const steps: SessionStep[] = [];
   const openingVariant = pickVariant(random, 1, 3);
 
