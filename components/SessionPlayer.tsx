@@ -124,6 +124,45 @@ function estimateSpeechSeconds(value: string): number {
   return Math.max(1, value.trim().length / 14);
 }
 
+const AUDIO_RETRY_DELAY_MS = 500;
+const MEDIA_ERROR_NAMES: Record<number, string> = {
+  1: "MEDIA_ERR_ABORTED",
+  2: "MEDIA_ERR_NETWORK",
+  3: "MEDIA_ERR_DECODE",
+  4: "MEDIA_ERR_SRC_NOT_SUPPORTED",
+};
+
+type AudioFailure = { name: string; message: string };
+
+function toAudioFailure(error: unknown): AudioFailure {
+  if (error instanceof Error || error instanceof DOMException) {
+    return { name: error.name, message: error.message };
+  }
+  return { name: "UnknownError", message: String(error) };
+}
+
+function mediaErrorToFailure(error: MediaError | null): AudioFailure {
+  if (!error) return { name: "MediaError", message: "(geen details)" };
+  return { name: MEDIA_ERROR_NAMES[error.code] ?? `MediaError ${error.code}`, message: error.message || "(geen details)" };
+}
+
+function isAbortFailure(failure: AudioFailure): boolean {
+  return failure.name === "AbortError" || failure.name === "MEDIA_ERR_ABORTED";
+}
+
+function describeFragment(fragment: SessionAudioFragment): string {
+  return "key" in fragment ? `${fragment.key} (variant ${fragment.variant})` : "intro";
+}
+
+/** Only the file name, never the host or query parameters (signed URLs may carry tokens). */
+function fragmentFileName(url: string): string {
+  try {
+    return new URL(url).pathname.split("/").pop() ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function getStepAudioUrl(step: SessionStep | undefined): string | null {
   if (!step) return null;
   if (step.type === "audio") return step.fragment.url;
@@ -139,6 +178,8 @@ export function SessionPlayer({ exercise, fragments, lang, voice, testMode }: Pr
   const activeAudioIndexRef = useRef<number | null>(null);
   const activeStepIndexRef = useRef(0);
   const activeSessionIdRef = useRef(0);
+  // Bumped whenever playback is taken over, paused or stopped, so stale failures and retries are ignored.
+  const playTokenRef = useRef(0);
   const sessionLockRef = useRef(false);
   const completedStepsRef = useRef(new Set<number>());
   const stepsRef = useRef<SessionStep[]>([]);
@@ -197,27 +238,63 @@ export function SessionPlayer({ exercise, fragments, lang, voice, testMode }: Pr
     setStepIndex(finishedIndex + 1);
   }, []);
 
-  const playFragment = useCallback((url: string, onEnded: (() => void) | undefined, sessionId: number) => {
+  const playFragment = useCallback((
+    fragment: SessionAudioFragment,
+    onEnded: (() => void) | undefined,
+    sessionId: number,
+    options: { resume?: boolean } = {},
+  ) => {
     const audio = audioRef.current;
-    if (!audio) return;
+    const url = fragment.url;
+    if (!audio || !url) return;
+    const token = ++playTokenRef.current;
     let settled = false;
+    let attempt = 1;
+    const isCurrent = () => token === playTokenRef.current && sessionId === activeSessionIdRef.current;
     const finish = () => {
       if (settled) return;
       settled = true;
       if (sessionId === activeSessionIdRef.current) onEnded?.();
     };
-    audio.onended = finish;
-    audio.onerror = () => {
-      if (sessionId === activeSessionIdRef.current) setPlaybackError(true);
+    const fail = (failure: AudioFailure, attemptNo: number) => {
+      // Ignore failures from a superseded attempt, or a second report (error event + play() rejection) of the same one.
+      if (settled || attemptNo !== attempt || !isCurrent()) return;
+      // Playback was interrupted by pause() or a new fragment: not an error.
+      if (isAbortFailure(failure)) return;
+      const willRetry = attempt === 1;
+      console.warn("[SessionPlayer] Audiofragment kon niet worden afgespeeld", {
+        poging: attemptNo,
+        opnieuwProberen: willRetry,
+        fout: failure.name,
+        boodschap: failure.message,
+        oefening: exercise.nummer,
+        taal: fragment.lang ?? lang,
+        stem: fragment.voice ?? voice,
+        fragment: describeFragment(fragment),
+        bestand: fragmentFileName(url),
+      });
+      if (willRetry) {
+        attempt = 2;
+        window.setTimeout(() => {
+          if (!settled && isCurrent()) startAttempt(true);
+        }, AUDIO_RETRY_DELAY_MS);
+        return;
+      }
+      setPlaybackError(true);
       finish();
     };
-    audio.src = url;
-    audio.load();
-    void audio.play().catch(() => {
-      if (sessionId === activeSessionIdRef.current) setPlaybackError(true);
-      finish();
-    });
-  }, []);
+    const startAttempt = (reload: boolean) => {
+      const attemptNo = attempt;
+      audio.onended = finish;
+      audio.onerror = () => fail(mediaErrorToFailure(audio.error), attemptNo);
+      if (reload) {
+        audio.src = url;
+        audio.load();
+      }
+      void audio.play().catch((error: unknown) => fail(toAudioFailure(error), attemptNo));
+    };
+    startAttempt(!options.resume);
+  }, [exercise.nummer, lang, voice]);
 
   useEffect(() => {
     if (playbackState !== "running" || !currentStep) return;
@@ -234,7 +311,7 @@ export function SessionPlayer({ exercise, fragments, lang, voice, testMode }: Pr
       const audio = audioRef.current;
       activeAudioIndexRef.current = stepIndex;
       const sessionId = activeSessionIdRef.current;
-      playFragment(url, () => advanceFrom(stepIndex, sessionId), sessionId);
+      playFragment(currentStep.fragment, () => advanceFrom(stepIndex, sessionId), sessionId);
       return () => {
         if (audio) {
           audio.onended = null;
@@ -273,9 +350,9 @@ export function SessionPlayer({ exercise, fragments, lang, voice, testMode }: Pr
         const finishMidpoint = () => setMidpoint((prev) => (
           prev?.index === stepIndex ? { index: stepIndex, phase: "after" } : prev
         ));
-        const midpointUrl = currentStep.midpoint.audio.fragment.url;
-        if (midpointUrl) {
-          playFragment(midpointUrl, finishMidpoint, activeSessionIdRef.current);
+        const midpointFragment = currentStep.midpoint.audio.fragment;
+        if (midpointFragment.url) {
+          playFragment(midpointFragment, finishMidpoint, activeSessionIdRef.current);
         } else {
           // Without audio, show the halfway text for roughly as long as it would take to say it.
           window.setTimeout(finishMidpoint, estimateSpeechSeconds(currentStep.midpoint.audio.text) * 1000);
@@ -284,6 +361,7 @@ export function SessionPlayer({ exercise, fragments, lang, voice, testMode }: Pr
 
       if (remaining <= 0) {
         const audio = audioRef.current;
+        playTokenRef.current += 1;
         if (audio) {
           audio.pause();
           audio.onended = null;
@@ -381,7 +459,7 @@ export function SessionPlayer({ exercise, fragments, lang, voice, testMode }: Pr
     const firstStep = sessionSteps[0];
     if (firstStep?.type === "audio" && firstStep.fragment.url) {
       activeAudioIndexRef.current = 0;
-      playFragment(firstStep.fragment.url, () => advanceFrom(0, sessionId), sessionId);
+      playFragment(firstStep.fragment, () => advanceFrom(0, sessionId), sessionId);
     }
     if (sessionSteps.length > 0) {
       setPlaybackState("running");
@@ -397,6 +475,7 @@ export function SessionPlayer({ exercise, fragments, lang, voice, testMode }: Pr
       progress.elapsedBeforePause += Date.now() - progress.startedAt;
       progress.startedAt = null;
     }
+    playTokenRef.current += 1;
     audioRef.current?.pause();
     setPlaybackState("paused");
   }
@@ -408,27 +487,15 @@ export function SessionPlayer({ exercise, fragments, lang, voice, testMode }: Pr
     setPlaybackState("running");
     // The halfway fragment is not resumed after a pause, so its text must not stay on screen.
     setMidpoint((prev) => (prev?.phase === "playing" ? { ...prev, phase: "after" } : prev));
-    if (currentStep?.type === "audio" && currentStep.fragment.url && audioRef.current) {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        advanceFrom(stepIndex, sessionId);
-      };
-      audioRef.current.onended = finish;
-      audioRef.current.onerror = () => {
-        setPlaybackError(true);
-        finish();
-      };
-      void audioRef.current.play().catch(() => {
-        setPlaybackError(true);
-        finish();
-      });
+    if (currentStep?.type === "audio" && currentStep.fragment.url) {
+      // Continue where the fragment was paused; a retry reloads it from the start.
+      playFragment(currentStep.fragment, () => advanceFrom(stepIndex, sessionId), sessionId, { resume: true });
     }
   }
 
   function stopSession() {
     activeSessionIdRef.current += 1;
+    playTokenRef.current += 1;
     sessionLockRef.current = false;
     completedStepsRef.current.clear();
     audioRef.current?.pause();
